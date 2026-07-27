@@ -10,6 +10,7 @@ import Logo from '@/components/Logo'
 import EmojiPicker from 'emoji-picker-react'
 import ReactPlayer from 'react-player'
 import { nanoid } from 'nanoid'
+import DOMPurify from 'dompurify'
 
 type Participant = {
     user_id: string
@@ -192,10 +193,10 @@ const TextWidget = ({ w, setWidgets }: any) => {
                 style={{ fontSize: `${fontSize}px`, color, textAlign: align }}
                 onPointerDown={e => e.stopPropagation()}
                 onBlur={e => {
-                    const newContent = e.currentTarget.innerHTML;
+                    const newContent = DOMPurify.sanitize(e.currentTarget.innerHTML);
                     setWidgets((prev: Widget[]) => prev.map(x => x.id === w.id ? { ...x, content: newContent } : x))
                 }}
-                dangerouslySetInnerHTML={{ __html: w.content || 'Texto Libre' }}
+                dangerouslySetInnerHTML={{ __html: w.content ? DOMPurify.sanitize(w.content) : 'Texto Libre' }}
             />
         </div>
     )
@@ -632,6 +633,26 @@ export default function RoomClient({ slug }: { slug: string }) {
         let stream: MediaStream | null = null
         let PeerClass: any = null
 
+        const cleanupRoom = () => {
+            Object.values(peersRef.current).forEach((peer: any) => {
+                try { peer.destroy() } catch (e) {}
+            })
+            peersRef.current = {}
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop())
+            }
+            if (channelRef.current) {
+                channelRef.current.unsubscribe()
+                supabase.removeChannel(channelRef.current)
+            }
+            supabase.removeAllChannels()
+        }
+
+        const handleBeforeUnload = () => {
+            cleanupRoom()
+        }
+        window.addEventListener('beforeunload', handleBeforeUnload)
+
         const startConnection = async () => {
             try {
                 // @ts-ignore
@@ -703,6 +724,10 @@ export default function RoomClient({ slug }: { slug: string }) {
                 })
 
                 setParticipants(activeUsers)
+                if (activeUsers.length >= 15) {
+                    setAlertMessage("Advertencia: Alta concurrencia. El rendimiento de audio/video podría verse afectado.")
+                    setTimeout(() => setAlertMessage(null), 5000)
+                }
             })
 
             // Escuchar Kicks
@@ -826,18 +851,8 @@ export default function RoomClient({ slug }: { slug: string }) {
         startConnection()
 
         return () => {
-            Object.values(peersRef.current).forEach((peer: any) => {
-                try { peer.destroy() } catch (e) {}
-            })
-            peersRef.current = {}
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop())
-            }
-            if (channelRef.current) {
-                channelRef.current.unsubscribe()
-                supabase.removeChannel(channelRef.current)
-            }
-            supabase.removeAllChannels()
+            window.removeEventListener('beforeunload', handleBeforeUnload)
+            cleanupRoom()
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentUser, roomData?.id, slug, supabase])

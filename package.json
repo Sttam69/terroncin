@@ -12,6 +12,8 @@
     "@supabase/ssr": "^0.12.3",
     "@supabase/supabase-js": "^2.110.8",
     "@thaunknown/simple-peer": "^10.1.2",
+    "@types/dompurify": "^3.0.5",
+    "dompurify": "^3.4.12",
     "emoji-picker-react": "^4.19.1",
     "framer-motion": "^12.42.2",
     "lucide-react": "^1.27.0",

@@ -1,5 +1,6 @@
 'use client'
 
+import { use } from 'react'
 import dynamic from 'next/dynamic'
 
 // Desactivamos SSR por completo para el componente que maneja WebRTC
@@ -12,6 +13,7 @@ const RoomClient = dynamic(() => import('./RoomClient'), {
     )
 })
 
-export default function RoomPage({ params }: { params: { slug: string } }) {
-    return <RoomClient slug={params.slug} />
+export default function RoomPage({ params }: { params: Promise<{ slug: string }> }) {
+    const { slug } = use(params)
+    return <RoomClient slug={slug} />
 }
