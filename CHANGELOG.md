@@ -14,7 +14,14 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.
 - **WebRTC y Multimedia**: Logramos una conexión P2P sólida usando `simple-peer`. Ahora puedes usar tu cámara, compartir pantalla y hablar sin depender de un servidor central, además de ver videos de YouTube sincronizados con todos.
 - **Cursores Sincronizados**: Telepresencia real. Puedes ver dónde están los ratones de los demás moviéndose por el lienzo, cada uno con un color asignado.
 - **Monetización**: Un modal rápido de donaciones en el Lobby para apoyar el proyecto vía PayPal o escanear el QR de Deuna.
+- **Donaciones Globales**: Ahora el botón de apoyo es visible desde las pantallas de inicio de sesión y registro, es completamente bilingüe (Español/Inglés) y vive en la esquina superior derecha.
 
 ### Cambiado
 - **Rediseño del Lobby**: Le dimos un lavado de cara completo a la pantalla principal (`/`). Adoptamos el estilo glassmorphism, modo oscuro ambiental y una sección súper práctica para acceder a "Mis Salas" de inmediato.
 - **Lienzo Interactivo (Canvas)**: Pasamos de un simple fondo a un mega-lienzo paneable y con zoom (`react-zoom-pan-pinch`). Ahora puedes soltar notas de texto, subir imágenes, usar la herramienta de dibujo y acomodar los videos a tu gusto.
+- **Registro de Cambios Dinámico**: El modal de changelog ahora se alimenta automáticamente de un archivo centralizado (`changelogData.ts`), haciendo que las actualizaciones sean inmediatas.
+
+### Arreglado
+- **Fallo Crítico en Producción (SSR)**: Vercel y Turbopack crasheaban al intentar procesar `simple-peer` en el backend. Lo solucionamos aislando la lógica de la sala en un componente cliente y desactivando el SSR (`next/dynamic`).
+- **Autenticación con GitHub**: El botón de GitHub en el Login redirigía por error a una función bloqueada de Apple. Ahora utiliza Supabase OAuth de forma correcta y limpia, con su ícono oficial.
+- **Fugas de Memoria WebRTC**: Implementamos una limpieza profunda (`cleanup`) al abandonar la sala para cerrar conexiones, limpiar canales y apagar la cámara, evitando que la app colapse con el tiempo.
