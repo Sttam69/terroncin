@@ -9,9 +9,18 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.12.3",
+    "@supabase/supabase-js": "^2.110.8",
+    "@thaunknown/simple-peer": "^10.1.2",
+    "emoji-picker-react": "^4.19.1",
+    "framer-motion": "^12.42.2",
+    "lucide-react": "^1.27.0",
+    "nanoid": "^6.0.0",
     "next": "16.2.12",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "react-player": "^3.4.0",
+    "react-zoom-pan-pinch": "^4.0.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
