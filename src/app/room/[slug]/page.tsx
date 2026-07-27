@@ -631,10 +631,12 @@ export default function RoomPage() {
         if (!currentUser || !roomData || !isApproved) return
 
         let stream: MediaStream | null = null
-        const PeerClass = require('@thaunknown/simple-peer')
+        let PeerClass: any = null
 
         const startConnection = async () => {
             try {
+                // @ts-ignore
+                PeerClass = (await import('@thaunknown/simple-peer')).default
                 stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
                 setLocalStream(stream)
                 if (localVideoRef.current) {

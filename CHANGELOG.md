@@ -1,20 +1,20 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+Todos los cambios notables de este proyecto se documentarán en este archivo.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
+y este proyecto se adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [v0.5.0-alpha] - 2026-07-27
 
-### Added
-- **Panel de Administración (`/admin`)**: Interfaz dedicada para gestión avanzada de la plataforma con edición de perfiles en tiempo real.
-- **Roles de Usuario**: Soporte para roles jerárquicos (`user`, `premium`, `moderator`, `admin`, `banned`) integrados con Supabase.
-- **Sistema Knock-Knock**: Flujo de aprobación para permitir o denegar la entrada a salas privadas a usuarios no invitados (Control de Host).
-- **WebRTC y Multimedia**: Infraestructura robusta P2P (mesh) usando `simple-peer` para transmisión de cámara, pantalla compartida (Screen Share) y audio en la sala, con STUN de Google.
-- **Cursores Sincronizados**: Telepresencia fluida al mostrar el puntero con colores asignados del resto de participantes dentro del lienzo interactivo.
-- **Monetización**: Modal de donaciones integrado en el Lobby con acceso rápido a PayPal y QR de Deuna.
+### Añadido
+- **Panel de Administración (`/admin`)**: Una interfaz dedicada para gestionar la plataforma, editar perfiles y gestionar reportes de forma sencilla.
+- **Roles de Usuario**: Soporte completo para jerarquías (`user`, `premium`, `moderator`, `admin`, `banned`) conectadas directamente con Supabase.
+- **Sistema Knock-Knock**: Si la sala es privada y no estás invitado, el anfitrión tiene que aprobar tu entrada. Más control, menos intrusos.
+- **WebRTC y Multimedia**: Logramos una conexión P2P sólida usando `simple-peer`. Ahora puedes usar tu cámara, compartir pantalla y hablar sin depender de un servidor central, además de ver videos de YouTube sincronizados con todos.
+- **Cursores Sincronizados**: Telepresencia real. Puedes ver dónde están los ratones de los demás moviéndose por el lienzo, cada uno con un color asignado.
+- **Monetización**: Un modal rápido de donaciones en el Lobby para apoyar el proyecto vía PayPal o escanear el QR de Deuna.
 
-### Changed
-- **Rediseño del Lobby**: Modernización completa de la pantalla principal (`/`) con estética glassmorphism, modo oscuro ambiental y sección rápida para "Mis Salas".
-- **Lienzo Interactivo (Canvas)**: Evolución del espacio de la sala (`react-zoom-pan-pinch`) para soportar widgets avanzados: notas de texto, subida de imágenes, herramientas de dibujo (Pizarra) y el `SyncedVideoWidget` de YouTube.
+### Cambiado
+- **Rediseño del Lobby**: Le dimos un lavado de cara completo a la pantalla principal (`/`). Adoptamos el estilo glassmorphism, modo oscuro ambiental y una sección súper práctica para acceder a "Mis Salas" de inmediato.
+- **Lienzo Interactivo (Canvas)**: Pasamos de un simple fondo a un mega-lienzo paneable y con zoom (`react-zoom-pan-pinch`). Ahora puedes soltar notas de texto, subir imágenes, usar la herramienta de dibujo y acomodar los videos a tu gusto.
