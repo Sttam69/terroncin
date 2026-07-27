@@ -318,7 +318,15 @@ export default function LobbyPage() {
     router.push('/login')
   }
 
-  const displayName = profile?.display_name || user?.email?.split('@')[0] || 'Invitado'
+  const displayName = profile?.display_name || user?.email?.split('@')[0] || ''
+
+  if (!user) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#0a0a0c] text-white">
+        <span className="material-symbols-outlined animate-spin text-terroncin-primary text-4xl">progress_activity</span>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col min-h-screen relative overflow-hidden bg-terroncin-background">
