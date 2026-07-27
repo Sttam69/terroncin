@@ -16,7 +16,8 @@ export const changelogData: ChangelogEntry[] = [
             "Modal de donaciones bilingüe (Lobby, Login y Registro)",
             "Changelog automatizado y dinámico",
             "Soporte nativo para OAuth con GitHub",
-            "Protecciones XSS, Fugas de Memoria WebRTC y alertas de concurrencia masiva"
+            "Protecciones XSS, Fugas de Memoria WebRTC y alertas de concurrencia masiva",
+            "Corrección de compilación SSR en Panel de Administración"
         ] 
     },
     { 

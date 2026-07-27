@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { adminUpdateUser, adminResetPassword } from '@/app/actions/admin'
 
+export const dynamic = 'force-dynamic'
+
 export default function AdminDashboard() {
   const [profiles, setProfiles] = useState<any[]>([])
   const [reports, setReports] = useState<any[]>([])
