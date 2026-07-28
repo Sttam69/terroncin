@@ -1194,12 +1194,23 @@ export default function RoomClient({ slug }: { slug: string }) {
                         {participants.map((p, index) => {
                             const isMe = p.user_id === currentUser?.id;
 
-                            const baseLeft = isMe ? 'calc(5000px - 300px)' : `calc(5000px + ${(index * 200) - 300}px)`;
-                            const baseTop = isMe ? 'calc(5000px - 168px)' : `calc(5000px + ${(index * 150) - 100}px)`;
+                            // Posiciones iniciales numéricas (px) para poder acumular offsets
+                            const defaultX = isMe ? 4700 : (4700 + (index * 200));
+                            const defaultY = isMe ? 4832 : (4900 + (index * 150));
+
+                            // Fuente de verdad: bubblePositions (sincronizado) o defaults
+                            const camKey = `cam-${p.user_id}`;
+                            const camPos = bubblePositions[camKey] || { x: defaultX, y: defaultY };
 
                             const userStreams = remoteStreams[p.user_id] || []
                             const mainStream = userStreams[0]
                             const screenShareStream = userStreams[1]
+
+                            // Posición para screen share
+                            const screenKey = `screen-${p.user_id}`;
+                            const screenDefaultX = 4800 + (index * 200);
+                            const screenDefaultY = 5150 + (index * 150);
+                            const screenPos = bubblePositions[screenKey] || { x: screenDefaultX, y: screenDefaultY };
 
                             return (
                                 <div key={p.user_id}>
@@ -1209,21 +1220,21 @@ export default function RoomClient({ slug }: { slug: string }) {
                                         dragMomentum={false}
                                         onPointerDown={e => e.stopPropagation()}
                                         whileDrag={{ scale: 1.05, zIndex: 100, cursor: 'grabbing' }}
-                                        initial={{ left: baseLeft, top: baseTop }}
-                                        animate={bubblePositions[`cam-${p.user_id}`] ? { left: bubblePositions[`cam-${p.user_id}`].x, top: bubblePositions[`cam-${p.user_id}`].y } : undefined}
+                                        initial={{ left: camPos.x, top: camPos.y }}
+                                        animate={{ left: camPos.x, top: camPos.y }}
+                                        transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
                                         onDragEnd={(_, info) => {
-                                            const el = document.querySelector(`[data-bubble-id="cam-${p.user_id}"]`) as HTMLElement
-                                            if (el && channelRef.current) {
-                                                const newX = parseFloat(el.style.left) || 0
-                                                const newY = parseFloat(el.style.top) || 0
+                                            const newX = camPos.x + info.offset.x;
+                                            const newY = camPos.y + info.offset.y;
+                                            setBubblePositions(prev => ({ ...prev, [camKey]: { x: newX, y: newY } }));
+                                            if (channelRef.current) {
                                                 channelRef.current.send({
                                                     type: 'broadcast',
                                                     event: 'bubble_move',
-                                                    payload: { bubbleId: `cam-${p.user_id}`, x: newX, y: newY }
+                                                    payload: { bubbleId: camKey, x: newX, y: newY }
                                                 })
                                             }
                                         }}
-                                        data-bubble-id={`cam-${p.user_id}`}
                                         className={`nodrag absolute flex flex-col z-50 overflow-hidden shadow-2xl border-2 border-terroncin-accent group pointer-events-auto cursor-grab bg-black/80 backdrop-blur-xl resize`}
                                         style={{
                                             width: cameraSizes[p.user_id]?.width || 256,
@@ -1281,7 +1292,21 @@ export default function RoomClient({ slug }: { slug: string }) {
                                             dragMomentum={false}
                                             onPointerDown={e => e.stopPropagation()}
                                             whileDrag={{ scale: 1.05, zIndex: 100, cursor: 'grabbing' }}
-                                            initial={{ left: `calc(5000px + ${(index * 200) - 200}px)`, top: `calc(5000px + ${(index * 150) + 150}px)` }}
+                                            initial={{ left: screenPos.x, top: screenPos.y }}
+                                            animate={{ left: screenPos.x, top: screenPos.y }}
+                                            transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
+                                            onDragEnd={(_, info) => {
+                                                const newX = screenPos.x + info.offset.x;
+                                                const newY = screenPos.y + info.offset.y;
+                                                setBubblePositions(prev => ({ ...prev, [screenKey]: { x: newX, y: newY } }));
+                                                if (channelRef.current) {
+                                                    channelRef.current.send({
+                                                        type: 'broadcast',
+                                                        event: 'bubble_move',
+                                                        payload: { bubbleId: screenKey, x: newX, y: newY }
+                                                    })
+                                                }
+                                            }}
                                             className="nodrag absolute flex flex-col rounded-[32px] z-50 overflow-hidden shadow-2xl border-2 border-terroncin-accent group pointer-events-auto cursor-grab bg-black/90 resize"
                                             style={{
                                                 width: screenSizes[p.user_id]?.width || 800,
