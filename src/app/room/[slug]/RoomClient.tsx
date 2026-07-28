@@ -28,6 +28,7 @@ type CursorData = {
 
 const CURSOR_COLORS = ['#EF4444', '#F97316', '#F59E0B', '#10B981', '#06B6D4', '#3B82F6', '#8B5CF6', '#D946EF', '#F43F5E']
 const getCursorColor = (id: string) => CURSOR_COLORS[id.charCodeAt(0) % CURSOR_COLORS.length]
+const CANVAS_SIZE = 10000
 
 type Widget = {
     id: string;
@@ -147,14 +148,37 @@ const DrawWidget = ({ w, setWidgets }: any) => {
     )
 }
 
-const NoteWidget = ({ w, setWidgets }: any) => {
+const NoteWidget = ({ w, setWidgets, channelRef }: { w: any, setWidgets: any, channelRef?: any }) => {
     const [fontSize, setFontSize] = useState(w.fontSize || 14)
     const [color, setColor] = useState(w.color || '#ffffff')
     const [align, setAlign] = useState(w.textAlign || 'left')
     const [content, setContent] = useState(w.content || '')
+    const debounceRef = useRef<any>(null)
+
+    // Sync incoming content from remote users
+    useEffect(() => {
+        setContent(w.content || '')
+    }, [w.content])
 
     const updateWidget = () => {
         setWidgets((prev: Widget[]) => prev.map(x => x.id === w.id ? { ...x, fontSize, color, textAlign: align, content } : x))
+    }
+
+    const handleContentChange = (newText: string) => {
+        setContent(newText)
+        // Update local state immediately
+        setWidgets((prev: Widget[]) => prev.map(x => x.id === w.id ? { ...x, content: newText } : x))
+        // Debounced broadcast to remote users
+        if (debounceRef.current) clearTimeout(debounceRef.current)
+        debounceRef.current = setTimeout(() => {
+            if (channelRef?.current) {
+                channelRef.current.send({
+                    type: 'broadcast',
+                    event: 'widget_sync',
+                    payload: { action: 'update', widget: { id: w.id, content: newText } }
+                })
+            }
+        }, 300)
     }
 
     return (
@@ -171,7 +195,7 @@ const NoteWidget = ({ w, setWidgets }: any) => {
             </div>
             <textarea
                 value={content}
-                onChange={e => setContent(e.target.value)}
+                onChange={e => handleContentChange(e.target.value)}
                 onBlur={updateWidget}
                 className="flex-1 bg-transparent resize-none outline-none p-4 font-inter w-full h-full"
                 style={{ fontSize: `${fontSize}px`, color, textAlign: align }}
@@ -326,7 +350,7 @@ const WidgetNode = ({ w, setWidgets, channelRef }: { w: Widget, setWidgets: any,
                     channelRef.current.send({
                         type: 'broadcast',
                         event: 'widget_sync',
-                        payload: { action: 'update', widget: { id: w.id, x: newX, y: newY } }
+                        payload: { action: 'update', widget: { id: w.id, x: newX / CANVAS_SIZE, y: newY / CANVAS_SIZE, _relative: true } }
                     })
                 }
             }}
@@ -363,7 +387,7 @@ const WidgetNode = ({ w, setWidgets, channelRef }: { w: Widget, setWidgets: any,
                 </button>
             </div>
             <div className="flex-1 bg-[#1e2024]/90 w-full h-full relative" onPointerDown={e => e.stopPropagation()}>
-                {w.type === 'note' && <NoteWidget w={w} setWidgets={setWidgets} />}
+                {w.type === 'note' && <NoteWidget w={w} setWidgets={setWidgets} channelRef={channelRef} />}
                 {w.type === 'text' && <TextWidget w={w} setWidgets={setWidgets} />}
                 {w.type === 'image' && <img src={w.content} className="w-full h-full object-contain pointer-events-none" />}
                 {w.type === 'video' && <SyncedVideoWidget w={w} setWidgets={setWidgets} channelRef={channelRef} />}
@@ -801,10 +825,29 @@ export default function RoomClient({ slug }: { slug: string }) {
                 .on('broadcast', { event: 'widget_sync' }, (payload) => {
                     const { action, widget } = payload.payload
                     if (action === 'update') {
-                        setWidgets(prev => prev.map(x => x.id === widget.id ? { ...x, ...widget } : x))
+                        // Decode relative coordinates back to absolute px
+                        const decoded = { ...widget }
+                        if (decoded._relative) {
+                            if (decoded.x !== undefined) decoded.x = decoded.x * CANVAS_SIZE
+                            if (decoded.y !== undefined) decoded.y = decoded.y * CANVAS_SIZE
+                            delete decoded._relative
+                        }
+                        setWidgets(prev => prev.map(x => x.id === decoded.id ? { ...x, ...decoded } : x))
                     } else if (action === 'add') {
-                        setWidgets(prev => [...prev, widget])
+                        // Decode relative coords for new widgets too
+                        const decoded = { ...widget }
+                        if (decoded._relative) {
+                            if (decoded.x !== undefined) decoded.x = decoded.x * CANVAS_SIZE
+                            if (decoded.y !== undefined) decoded.y = decoded.y * CANVAS_SIZE
+                            delete decoded._relative
+                        }
+                        setWidgets(prev => [...prev, decoded])
                     }
+                })
+                .on('broadcast', { event: 'bubble_move' }, (payload) => {
+                    const { bubbleId, rx, ry } = payload.payload
+                    // Decode relative to absolute
+                    setBubblePositions(prev => ({ ...prev, [bubbleId]: { x: rx * CANVAS_SIZE, y: ry * CANVAS_SIZE } }))
                 })
                 .on('broadcast', { event: 'cursor-move' }, (payload) => {
                     const { userId, x, y, name } = payload.payload
@@ -1040,7 +1083,7 @@ export default function RoomClient({ slug }: { slug: string }) {
             channelRef.current.send({
                 type: 'broadcast',
                 event: 'widget_sync',
-                payload: { action: 'add', widget: newWidget }
+                payload: { action: 'add', widget: { ...newWidget, x: newWidget.x / CANVAS_SIZE, y: newWidget.y / CANVAS_SIZE, _relative: true } }
             })
         }
         setWidgetPrompt({ isOpen: false, type: null })
@@ -1231,7 +1274,7 @@ export default function RoomClient({ slug }: { slug: string }) {
                                                 channelRef.current.send({
                                                     type: 'broadcast',
                                                     event: 'bubble_move',
-                                                    payload: { bubbleId: camKey, x: newX, y: newY }
+                                                    payload: { bubbleId: camKey, rx: newX / CANVAS_SIZE, ry: newY / CANVAS_SIZE }
                                                 })
                                             }
                                         }}
@@ -1303,7 +1346,7 @@ export default function RoomClient({ slug }: { slug: string }) {
                                                     channelRef.current.send({
                                                         type: 'broadcast',
                                                         event: 'bubble_move',
-                                                        payload: { bubbleId: screenKey, x: newX, y: newY }
+                                                        payload: { bubbleId: screenKey, rx: newX / CANVAS_SIZE, ry: newY / CANVAS_SIZE }
                                                     })
                                                 }
                                             }}
