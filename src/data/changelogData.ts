@@ -6,8 +6,18 @@ export type ChangelogEntry = {
 
 export const changelogData: ChangelogEntry[] = [
     { 
-        version: "v0.5.0-alpha", 
+        version: "v0.6.0-beta", 
         isLatest: true,
+        features: [
+            "Lanzamiento Beta Público: Transición oficial de Alpha a Beta con arquitectura preparada para alta concurrencia.",
+            "Auth Guard estricto con proxy.ts: Migración al nuevo estándar de Next.js 16 para intercepción de rutas y protección de sesiones.",
+            "Corrección y limpieza de despliegue: Resolución de conflictos de compilación en Vercel por archivos residuales de middleware.",
+            "Configuración de producción OAuth: URIs de redirección para Google Login apuntando al entorno en vivo."
+        ] 
+    },
+    { 
+        version: "v0.5.0-alpha", 
+        isLatest: false,
         features: [
             "Panel de Administración y Moderación", 
             "Sistema Knock-Knock para salas privadas", 

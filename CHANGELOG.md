@@ -5,6 +5,20 @@ Todos los cambios notables de este proyecto se documentarán en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 y este proyecto se adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.6.0-beta] - 2026-07-27
+
+¡Oficializamos el lanzamiento de Terroncín a fase Beta! Toda la arquitectura ha sido consolidada para soportar alta concurrencia y despliegues seguros en producción.
+
+### Añadido
+- **Auth Guard Estricto**: Implementación del nuevo estándar de Next.js 16 (`proxy.ts`) para la intercepción de rutas. El sistema ahora bloquea proactivamente cualquier intento de acceso sin sesión y redirige hacia `/login`.
+
+### Cambiado
+- **Refactorización de Interceptores**: Migración completa del obsoleto `middleware.ts` a la nueva convención `proxy.ts`, garantizando compatibilidad total con el compilador Turbopack.
+
+### Arreglado
+- **Despliegues en Vercel Limpios**: Resolución definitiva de los crashes y conflictos de rutas causados por archivos residuales y cachés duplicados, logrando compilaciones exitosas.
+- **Producción Google OAuth**: Se actualizaron las URIs de redirección y credenciales en Supabase para asegurar que el inicio de sesión con Google funcione en el entorno de despliegue en vivo.
+
 ## [v0.5.0-alpha] - 2026-07-27
 
 ### Añadido
