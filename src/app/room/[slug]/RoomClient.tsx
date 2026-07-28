@@ -820,6 +820,7 @@ export default function RoomClient({ slug }: { slug: string }) {
                     if (status === 'SUBSCRIBED') {
                         isChannelReady.current = true
                         await roomChannel.track({
+                            user_id: currentUser.id,
                             display_name: displayName,
                             avatar_url: avatarUrl,
                             status_text: statusText,
@@ -910,7 +911,7 @@ export default function RoomClient({ slug }: { slug: string }) {
             cleanupRoom()
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentUser, roomData?.id, slug, supabase])
+    }, [currentUser, roomData?.id, slug, supabase, isApproved])
 
     const sendMessage = async (e?: React.FormEvent) => {
         if (e) e.preventDefault()
