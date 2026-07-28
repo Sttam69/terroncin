@@ -8,7 +8,8 @@ import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch'
 import { Camera, MonitorUp, MousePointer2, ChevronDown, ChevronUp, Image as ImageIcon, Video, MessageSquare, X, Smile, Mic, MicOff, VideoOff, PhoneOff, Type, PlaySquare, PenTool, StickyNote, ChevronRight, ChevronLeft, Pointer } from 'lucide-react'
 import Logo from '@/components/Logo'
 import EmojiPicker from 'emoji-picker-react'
-import ReactPlayer from 'react-player'
+import dynamic from 'next/dynamic'
+const ReactPlayer = dynamic(() => import('react-player'), { ssr: false })
 import { nanoid } from 'nanoid'
 import DOMPurify from 'dompurify'
 
@@ -245,25 +246,15 @@ const TextWidget = ({ w, setWidgets }: any) => {
 
 const SyncedVideoWidget = ({ w, setWidgets, channelRef }: any) => {
     const playerRef = useRef<any>(null)
-    const [playing, setPlaying] = useState(false)
     const [url, setUrl] = useState(w.content || '')
     const ignoreNextSync = useRef(false)
-
-    const [isMounted, setIsMounted] = useState(false)
-    useEffect(() => setIsMounted(true), [])
 
     useEffect(() => {
         const handleSync = (e: any) => {
             const data = e.detail
             if (data.widgetId !== w.id) return
 
-            if (data.type === 'play') {
-                ignoreNextSync.current = true
-                setPlaying(true)
-            } else if (data.type === 'pause') {
-                ignoreNextSync.current = true
-                setPlaying(false)
-            } else if (data.type === 'seek') {
+            if (data.type === 'seek') {
                 ignoreNextSync.current = true
                 playerRef.current?.seekTo(data.playedSeconds, 'seconds')
             } else if (data.type === 'url') {
@@ -288,8 +279,6 @@ const SyncedVideoWidget = ({ w, setWidgets, channelRef }: any) => {
         }
     }
 
-    const onPlay = () => { setPlaying(true); broadcast('play', {}) }
-    const onPause = () => { setPlaying(false); broadcast('pause', {}) }
     const onSeek = (e: any) => { broadcast('seek', { playedSeconds: e }) }
 
     return (
@@ -310,8 +299,8 @@ const SyncedVideoWidget = ({ w, setWidgets, channelRef }: any) => {
                     />
                 </div>
             ) : (
-                <div className="w-full h-full pointer-events-auto" onPointerDown={e => e.stopPropagation()}>
-                    {isMounted && (() => {
+                <div className="w-full h-full pointer-events-auto" onPointerDownCapture={e => e.stopPropagation()}>
+                    {(() => {
                         const Player = ReactPlayer as any;
                         return (
                             <Player
@@ -320,9 +309,6 @@ const SyncedVideoWidget = ({ w, setWidgets, channelRef }: any) => {
                                 width="100%"
                                 height="100%"
                                 controls
-                                playing={playing}
-                                onPlay={onPlay}
-                                onPause={onPause}
                                 onSeek={onSeek}
                                 onError={(e: any) => console.error("Error reproduciendo Video Widget:", e)}
                             />
@@ -334,8 +320,10 @@ const SyncedVideoWidget = ({ w, setWidgets, channelRef }: any) => {
     )
 }
 
-const WidgetNode = ({ w, setWidgets, channelRef }: { w: Widget, setWidgets: any, channelRef?: any }) => {
+const WidgetNode = ({ w, setWidgets, channelRef, canvasScale }: { w: Widget, setWidgets: any, channelRef?: any, canvasScale: number }) => {
     const dragControls = useDragControls()
+    const dragX = useMotionValue(0)
+    const dragY = useMotionValue(0)
     return (
         <motion.div
             drag
@@ -343,8 +331,8 @@ const WidgetNode = ({ w, setWidgets, channelRef }: { w: Widget, setWidgets: any,
             dragListener={false}
             dragMomentum={false}
             onDragEnd={(_, info) => {
-                const newX = w.x + info.offset.x
-                const newY = w.y + info.offset.y
+                const newX = w.x + (info.offset.x / canvasScale)
+                const newY = w.y + (info.offset.y / canvasScale)
                 setWidgets((prev: Widget[]) => prev.map(x => x.id === w.id ? { ...x, x: newX, y: newY } : x))
                 if (channelRef?.current) {
                     channelRef.current.send({
@@ -353,6 +341,8 @@ const WidgetNode = ({ w, setWidgets, channelRef }: { w: Widget, setWidgets: any,
                         payload: { action: 'update', widget: { id: w.id, x: newX / CANVAS_SIZE, y: newY / CANVAS_SIZE, _relative: true } }
                     })
                 }
+                dragX.set(0)
+                dragY.set(0)
             }}
             whileDrag={{ scale: 1.05, zIndex: 100 }}
             initial={{ left: w.x, top: w.y }}
@@ -360,6 +350,8 @@ const WidgetNode = ({ w, setWidgets, channelRef }: { w: Widget, setWidgets: any,
             transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
             className="nodrag absolute flex flex-col z-50 shadow-2xl border border-white/20 rounded-xl bg-[#1e2024]/90 backdrop-blur-md pointer-events-auto resize overflow-hidden"
             style={{
+                x: dragX,
+                y: dragY,
                 minWidth: 200,
                 minHeight: 150,
             }}
@@ -394,6 +386,151 @@ const WidgetNode = ({ w, setWidgets, channelRef }: { w: Widget, setWidgets: any,
                 {w.type === 'draw' && <DrawWidget w={w} setWidgets={setWidgets} />}
             </div>
         </motion.div>
+    )
+}
+
+const ParticipantBubbles = ({ p, isMe, camKey, camPos, screenKey, screenPos, screenShareStream, mainStream, localVideoRef, cameraSizes, setCameraSizes, screenSizes, setScreenSizes, isDraggingRef, setBubblePositions, channelRef, canvasScale }: any) => {
+    const camDragX = useMotionValue(0)
+    const camDragY = useMotionValue(0)
+    const screenDragX = useMotionValue(0)
+    const screenDragY = useMotionValue(0)
+
+    return (
+        <div>
+            {/* Tarjeta de Cámara Principal */}
+            <motion.div
+                drag
+                dragMomentum={false}
+                onPointerDown={e => e.stopPropagation()}
+                whileDrag={{ scale: 1.05, zIndex: 100, cursor: 'grabbing' }}
+                initial={{ left: camPos.x, top: camPos.y }}
+                animate={isDraggingRef.current[camKey] ? undefined : { left: camPos.x, top: camPos.y }}
+                transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
+                onDragStart={() => {
+                    isDraggingRef.current[camKey] = true
+                }}
+                onDragEnd={(_, info) => {
+                    const newX = camPos.x + (info.offset.x / canvasScale);
+                    const newY = camPos.y + (info.offset.y / canvasScale);
+                    isDraggingRef.current[camKey] = false
+                    setBubblePositions((prev: any) => ({ ...prev, [camKey]: { x: newX, y: newY } }));
+                    if (channelRef.current) {
+                        channelRef.current.send({
+                            type: 'broadcast',
+                            event: 'bubble_move',
+                            payload: { bubbleId: camKey, rx: newX / CANVAS_SIZE, ry: newY / CANVAS_SIZE }
+                        })
+                    }
+                    camDragX.set(0)
+                    camDragY.set(0)
+                }}
+                className={`nodrag absolute flex flex-col z-50 overflow-hidden shadow-2xl border-2 border-terroncin-accent group pointer-events-auto cursor-grab bg-black/80 backdrop-blur-xl resize`}
+                style={{
+                    x: camDragX,
+                    y: camDragY,
+                    width: cameraSizes[p.user_id]?.width || 256,
+                    height: cameraSizes[p.user_id]?.height || 192,
+                    minWidth: 150,
+                    minHeight: 150,
+                    borderRadius: isMe ? 32 : 24
+                }}
+                onMouseUp={(e) => {
+                    const target = e.currentTarget;
+                    setCameraSizes((prev: any) => ({ ...prev, [p.user_id]: { width: target.offsetWidth, height: target.offsetHeight } }))
+                }}
+            >
+                {isMe ? (
+                    <video
+                        ref={localVideoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="w-full h-full object-cover pointer-events-none transform scale-x-[-1]"
+                    />
+                ) : (
+                    mainStream ? (
+                        <RemoteVideoPlayer
+                            stream={mainStream}
+                            className="w-full h-full object-cover pointer-events-none"
+                        />
+                    ) : (
+                        p.avatar_url ? (
+                            <div className="w-full h-full bg-cover bg-center pointer-events-none" style={{ backgroundImage: `url(${p.avatar_url})` }}></div>
+                        ) : (
+                            <div className="w-full h-full bg-gradient-to-br from-terroncin-primary/30 to-[#333539]/50 flex items-center justify-center text-5xl font-syne font-bold text-white shadow-inner pointer-events-none">
+                                {p.display_name.charAt(0).toUpperCase()}
+                            </div>
+                        )
+                    )
+                )}
+
+                <div className={`absolute inset-0 border-[3px] border-terroncin-accent opacity-0 group-hover:opacity-100 transition-opacity duration-300 shadow-[inset_0_0_20px_rgba(74,225,131,0.5)] pointer-events-none`} style={{ borderRadius: isMe ? 32 : 24 }}></div>
+
+                <div className={`absolute pointer-events-none ${isMe ? 'bottom-4 left-4 right-4 flex justify-between items-end' : 'bottom-3 left-3'}`}>
+                    <div className="bg-[#1e2024]/80 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 flex items-center gap-2 shadow-sm">
+                        <span className="w-2 h-2 rounded-full bg-terroncin-accent animate-pulse shadow-[0_0_8px_rgba(74,225,131,0.8)]"></span>
+                        <span className="font-inter text-xs font-semibold truncate max-w-[120px] text-white">
+                            {p.display_name} {isMe && <span className="text-gray-400 font-normal ml-1">(Tú)</span>}
+                        </span>
+                    </div>
+                </div>
+            </motion.div>
+
+            {/* Tarjeta Extra: Pantalla Compartida Remota */}
+            {!isMe && screenShareStream && (
+                <motion.div
+                    drag
+                    dragMomentum={false}
+                    onPointerDown={e => e.stopPropagation()}
+                    whileDrag={{ scale: 1.05, zIndex: 100, cursor: 'grabbing' }}
+                    initial={{ left: screenPos.x, top: screenPos.y }}
+                    animate={isDraggingRef.current[screenKey] ? undefined : { left: screenPos.x, top: screenPos.y }}
+                    transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
+                    onDragStart={() => {
+                        isDraggingRef.current[screenKey] = true
+                    }}
+                    onDragEnd={(_, info) => {
+                        const newX = screenPos.x + (info.offset.x / canvasScale);
+                        const newY = screenPos.y + (info.offset.y / canvasScale);
+                        isDraggingRef.current[screenKey] = false
+                        setBubblePositions((prev: any) => ({ ...prev, [screenKey]: { x: newX, y: newY } }));
+                        if (channelRef.current) {
+                            channelRef.current.send({
+                                type: 'broadcast',
+                                event: 'bubble_move',
+                                payload: { bubbleId: screenKey, rx: newX / CANVAS_SIZE, ry: newY / CANVAS_SIZE }
+                            })
+                        }
+                        screenDragX.set(0)
+                        screenDragY.set(0)
+                    }}
+                    className="nodrag absolute flex flex-col rounded-[32px] z-50 overflow-hidden shadow-2xl border-2 border-terroncin-accent group pointer-events-auto cursor-grab bg-black/90 resize"
+                    style={{
+                        x: screenDragX,
+                        y: screenDragY,
+                        width: screenSizes[p.user_id]?.width || 800,
+                        height: screenSizes[p.user_id]?.height || 450,
+                        minWidth: 300,
+                        minHeight: 200,
+                    }}
+                    onMouseUp={(e) => {
+                        const target = e.currentTarget;
+                        setScreenSizes((prev: any) => ({ ...prev, [p.user_id]: { width: target.offsetWidth, height: target.offsetHeight } }))
+                    }}
+                >
+                    <RemoteVideoPlayer
+                        stream={screenShareStream}
+                        className="w-full h-full object-contain pointer-events-none"
+                    />
+                    <div className="absolute top-4 left-4 pointer-events-none bg-[#1e2024]/90 backdrop-blur-md px-4 py-2 rounded-xl border border-terroncin-accent flex items-center gap-2 shadow-lg">
+                        <span className="material-symbols-outlined text-terroncin-accent text-[20px]">screen_share</span>
+                        <span className="font-inter text-sm font-bold text-white">
+                            Pantalla de {p.display_name}
+                        </span>
+                    </div>
+                </motion.div>
+            )}
+        </div>
     )
 }
 
@@ -767,6 +904,9 @@ export default function RoomClient({ slug }: { slug: string }) {
                             createPeer(id, isInitiator, stream, roomChannel)
                         }
                     }
+
+                    // Sort deterministically so index-based default positions match across all clients
+                    activeUsers.sort((a, b) => a.user_id.localeCompare(b.user_id))
 
                     const currentIds = Object.keys(presenceState)
                     Object.keys(peersRef.current).forEach(peerId => {
@@ -1268,7 +1408,7 @@ export default function RoomClient({ slug }: { slug: string }) {
 
                         {/* Widgets Render */}
                         {widgets.map(w => (
-                            <WidgetNode key={w.id} w={w} setWidgets={setWidgets} channelRef={channelRef} />
+                            <WidgetNode key={w.id} w={w} setWidgets={setWidgets} channelRef={channelRef} canvasScale={canvasTransform.scale} />
                         ))}
 
                         {/* Contenedor de Participantes Absolutos en el Mega Lienzo */}
@@ -1294,133 +1434,26 @@ export default function RoomClient({ slug }: { slug: string }) {
                             const screenPos = bubblePositions[screenKey] || { x: screenDefaultX, y: screenDefaultY };
 
                             return (
-                                <div key={p.user_id}>
-                                    {/* Tarjeta de Cámara Principal con Mayor Contraste */}
-                                    <motion.div
-                                        drag
-                                        dragMomentum={false}
-                                        onPointerDown={e => e.stopPropagation()}
-                                        whileDrag={{ scale: 1.05, zIndex: 100, cursor: 'grabbing' }}
-                                        initial={{ left: camPos.x, top: camPos.y }}
-                                        animate={isDraggingRef.current[camKey] ? undefined : { left: camPos.x, top: camPos.y }}
-                                        transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
-                                        onDragStart={() => {
-                                            isDraggingRef.current[camKey] = true
-                                        }}
-                                        onDragEnd={(_, info) => {
-                                            const newX = camPos.x + info.offset.x;
-                                            const newY = camPos.y + info.offset.y;
-                                            isDraggingRef.current[camKey] = false
-                                            setBubblePositions(prev => ({ ...prev, [camKey]: { x: newX, y: newY } }));
-                                            if (channelRef.current) {
-                                                channelRef.current.send({
-                                                    type: 'broadcast',
-                                                    event: 'bubble_move',
-                                                    payload: { bubbleId: camKey, rx: newX / CANVAS_SIZE, ry: newY / CANVAS_SIZE }
-                                                })
-                                            }
-                                        }}
-                                        className={`nodrag absolute flex flex-col z-50 overflow-hidden shadow-2xl border-2 border-terroncin-accent group pointer-events-auto cursor-grab bg-black/80 backdrop-blur-xl resize`}
-                                        style={{
-                                            width: cameraSizes[p.user_id]?.width || 256,
-                                            height: cameraSizes[p.user_id]?.height || 192,
-                                            minWidth: 150,
-                                            minHeight: 150,
-                                            borderRadius: isMe ? 32 : 24
-                                        }}
-                                        onMouseUp={(e) => {
-                                            const target = e.currentTarget;
-                                            setCameraSizes(prev => ({ ...prev, [p.user_id]: { width: target.offsetWidth, height: target.offsetHeight } }))
-                                        }}
-                                    >
-                                        {isMe ? (
-                                            <video
-                                                ref={localVideoRef}
-                                                autoPlay
-                                                playsInline
-                                                muted
-                                                className="w-full h-full object-cover pointer-events-none transform scale-x-[-1]"
-                                            />
-                                        ) : (
-                                            mainStream ? (
-                                                <RemoteVideoPlayer
-                                                    stream={mainStream}
-                                                    className="w-full h-full object-cover pointer-events-none"
-                                                />
-                                            ) : (
-                                                p.avatar_url ? (
-                                                    <div className="w-full h-full bg-cover bg-center pointer-events-none" style={{ backgroundImage: `url(${p.avatar_url})` }}></div>
-                                                ) : (
-                                                    <div className="w-full h-full bg-gradient-to-br from-terroncin-primary/30 to-[#333539]/50 flex items-center justify-center text-5xl font-syne font-bold text-white shadow-inner pointer-events-none">
-                                                        {p.display_name.charAt(0).toUpperCase()}
-                                                    </div>
-                                                )
-                                            )
-                                        )}
-
-                                        <div className={`absolute inset-0 border-[3px] border-terroncin-accent opacity-0 group-hover:opacity-100 transition-opacity duration-300 shadow-[inset_0_0_20px_rgba(74,225,131,0.5)] pointer-events-none`} style={{ borderRadius: isMe ? 32 : 24 }}></div>
-
-                                        <div className={`absolute pointer-events-none ${isMe ? 'bottom-4 left-4 right-4 flex justify-between items-end' : 'bottom-3 left-3'}`}>
-                                            <div className="bg-[#1e2024]/80 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 flex items-center gap-2 shadow-sm">
-                                                <span className="w-2 h-2 rounded-full bg-terroncin-accent animate-pulse shadow-[0_0_8px_rgba(74,225,131,0.8)]"></span>
-                                                <span className="font-inter text-xs font-semibold truncate max-w-[120px] text-white">
-                                                    {p.display_name} {isMe && <span className="text-gray-400 font-normal ml-1">(Tú)</span>}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </motion.div>
-
-                                    {/* Tarjeta Extra: Pantalla Compartida Remota */}
-                                    {!isMe && screenShareStream && (
-                                        <motion.div
-                                            drag
-                                            dragMomentum={false}
-                                            onPointerDown={e => e.stopPropagation()}
-                                            whileDrag={{ scale: 1.05, zIndex: 100, cursor: 'grabbing' }}
-                                            initial={{ left: screenPos.x, top: screenPos.y }}
-                                            animate={isDraggingRef.current[screenKey] ? undefined : { left: screenPos.x, top: screenPos.y }}
-                                            transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
-                                            onDragStart={() => {
-                                                isDraggingRef.current[screenKey] = true
-                                            }}
-                                            onDragEnd={(_, info) => {
-                                                const newX = screenPos.x + info.offset.x;
-                                                const newY = screenPos.y + info.offset.y;
-                                                isDraggingRef.current[screenKey] = false
-                                                setBubblePositions(prev => ({ ...prev, [screenKey]: { x: newX, y: newY } }));
-                                                if (channelRef.current) {
-                                                    channelRef.current.send({
-                                                        type: 'broadcast',
-                                                        event: 'bubble_move',
-                                                        payload: { bubbleId: screenKey, rx: newX / CANVAS_SIZE, ry: newY / CANVAS_SIZE }
-                                                    })
-                                                }
-                                            }}
-                                            className="nodrag absolute flex flex-col rounded-[32px] z-50 overflow-hidden shadow-2xl border-2 border-terroncin-accent group pointer-events-auto cursor-grab bg-black/90 resize"
-                                            style={{
-                                                width: screenSizes[p.user_id]?.width || 800,
-                                                height: screenSizes[p.user_id]?.height || 450,
-                                                minWidth: 300,
-                                                minHeight: 200,
-                                            }}
-                                            onMouseUp={(e) => {
-                                                const target = e.currentTarget;
-                                                setScreenSizes(prev => ({ ...prev, [p.user_id]: { width: target.offsetWidth, height: target.offsetHeight } }))
-                                            }}
-                                        >
-                                            <RemoteVideoPlayer
-                                                stream={screenShareStream}
-                                                className="w-full h-full object-contain pointer-events-none"
-                                            />
-                                            <div className="absolute top-4 left-4 pointer-events-none bg-[#1e2024]/90 backdrop-blur-md px-4 py-2 rounded-xl border border-terroncin-accent flex items-center gap-2 shadow-lg">
-                                                <span className="material-symbols-outlined text-terroncin-accent text-[20px]">screen_share</span>
-                                                <span className="font-inter text-sm font-bold text-white">
-                                                    Pantalla de {p.display_name}
-                                                </span>
-                                            </div>
-                                        </motion.div>
-                                    )}
-                                </div>
+                                <ParticipantBubbles
+                                    key={p.user_id}
+                                    p={p}
+                                    isMe={isMe}
+                                    camKey={camKey}
+                                    camPos={camPos}
+                                    screenKey={screenKey}
+                                    screenPos={screenPos}
+                                    screenShareStream={screenShareStream}
+                                    mainStream={mainStream}
+                                    localVideoRef={localVideoRef}
+                                    cameraSizes={cameraSizes}
+                                    setCameraSizes={setCameraSizes}
+                                    screenSizes={screenSizes}
+                                    setScreenSizes={setScreenSizes}
+                                    isDraggingRef={isDraggingRef}
+                                    setBubblePositions={setBubblePositions}
+                                    channelRef={channelRef}
+                                    canvasScale={canvasTransform.scale}
+                                />
                             )
                         })}
 
