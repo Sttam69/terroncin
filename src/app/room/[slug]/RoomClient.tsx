@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { motion, useDragControls } from 'framer-motion'
+import { motion, useDragControls, useMotionValue } from 'framer-motion'
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch'
 import { Camera, MonitorUp, MousePointer2, ChevronDown, ChevronUp, Image as ImageIcon, Video, MessageSquare, X, Smile, Mic, MicOff, VideoOff, PhoneOff, Type, PlaySquare, PenTool, StickyNote, ChevronRight, ChevronLeft, Pointer } from 'lucide-react'
 import Logo from '@/components/Logo'
@@ -413,6 +413,7 @@ export default function RoomClient({ slug }: { slug: string }) {
     const [localScreenStream, setLocalScreenStream] = useState<MediaStream | null>(null)
     const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream[]>>({})
     const [bubblePositions, setBubblePositions] = useState<Record<string, { x: number, y: number }>>({})
+    const isDraggingRef = useRef<Record<string, boolean>>({})
 
     // Widgets & Toolbar
     const [widgets, setWidgets] = useState<Widget[]>([])
@@ -797,7 +798,25 @@ export default function RoomClient({ slug }: { slug: string }) {
                         setTimeout(() => alert("Has sido expulsado de la sala."), 100)
                     }
                 })
-                .on('presence', { event: 'join' }, () => { })
+                .on('presence', { event: 'join' }, (payload) => {
+                    // When a new user joins, existing users emit their current bubble positions
+                    // so the newcomer can reconstruct the canvas state
+                    const joinedKeys = Object.keys(payload.newPresences || {})
+                    const isNewcomer = joinedKeys.includes(currentUser.id)
+                    if (!isNewcomer && roomChannel && isChannelReady.current) {
+                        // I'm an existing user — broadcast my bubble positions to help the newcomer
+                        setTimeout(() => {
+                            const myBubbles = Object.entries(bubblePositions)
+                            myBubbles.forEach(([bubbleId, pos]) => {
+                                roomChannel.send({
+                                    type: 'broadcast',
+                                    event: 'SYNC_INITIAL_STATE',
+                                    payload: { bubbleId, rx: pos.x / CANVAS_SIZE, ry: pos.y / CANVAS_SIZE }
+                                })
+                            })
+                        }, 500) // Small delay to let the newcomer's channel subscribe
+                    }
+                })
                 .on('broadcast', { event: 'signal' }, (payload) => {
                     const { from, to, signal } = payload.payload
                     if (to !== currentUser.id || !signal) return
@@ -846,8 +865,18 @@ export default function RoomClient({ slug }: { slug: string }) {
                 })
                 .on('broadcast', { event: 'bubble_move' }, (payload) => {
                     const { bubbleId, rx, ry } = payload.payload
-                    // Decode relative to absolute
+                    // Only apply remote moves when we are NOT dragging this bubble locally
+                    if (isDraggingRef.current[bubbleId]) return
+                    // Decode relative coords to absolute px based on OUR canvas size
                     setBubblePositions(prev => ({ ...prev, [bubbleId]: { x: rx * CANVAS_SIZE, y: ry * CANVAS_SIZE } }))
+                })
+                .on('broadcast', { event: 'SYNC_INITIAL_STATE' }, (payload) => {
+                    const { bubbleId, rx, ry } = payload.payload
+                    // Accept initial state only if we don't already have a position for this bubble
+                    setBubblePositions(prev => {
+                        if (prev[bubbleId]) return prev // Don't overwrite positions we already know
+                        return { ...prev, [bubbleId]: { x: rx * CANVAS_SIZE, y: ry * CANVAS_SIZE } }
+                    })
                 })
                 .on('broadcast', { event: 'cursor-move' }, (payload) => {
                     const { userId, x, y, name } = payload.payload
@@ -856,10 +885,6 @@ export default function RoomClient({ slug }: { slug: string }) {
                         ...prev,
                         [userId]: { x, y, name, color: prev[userId]?.color || getCursorColor(userId) }
                     }))
-                })
-                .on('broadcast', { event: 'bubble_move' }, (payload) => {
-                    const { bubbleId, x, y } = payload.payload
-                    setBubblePositions(prev => ({ ...prev, [bubbleId]: { x, y } }))
                 })
                 .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `slug=eq.${slug}` }, (payload) => {
                     setRoomData((prev: any) => ({ ...prev, ...payload.new }))
@@ -910,6 +935,19 @@ export default function RoomClient({ slug }: { slug: string }) {
 
             peer.on('connect', () => {
                 console.log(`✅ [WebRTC] ¡Conexión P2P ESTABLECIDA exitosamente con ${targetUserId}!`)
+                // When a peer connects, send our current bubble positions so they sync up
+                if (channel && isChannelReady.current) {
+                    setTimeout(() => {
+                        const myBubbles = Object.entries(bubblePositions)
+                        myBubbles.forEach(([bubbleId, pos]) => {
+                            channel.send({
+                                type: 'broadcast',
+                                event: 'SYNC_INITIAL_STATE',
+                                payload: { bubbleId, rx: pos.x / CANVAS_SIZE, ry: pos.y / CANVAS_SIZE }
+                            })
+                        })
+                    }, 300)
+                }
             })
 
             peer.on('error', (err: any) => {
@@ -1264,11 +1302,15 @@ export default function RoomClient({ slug }: { slug: string }) {
                                         onPointerDown={e => e.stopPropagation()}
                                         whileDrag={{ scale: 1.05, zIndex: 100, cursor: 'grabbing' }}
                                         initial={{ left: camPos.x, top: camPos.y }}
-                                        animate={{ left: camPos.x, top: camPos.y }}
+                                        animate={isDraggingRef.current[camKey] ? undefined : { left: camPos.x, top: camPos.y }}
                                         transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
+                                        onDragStart={() => {
+                                            isDraggingRef.current[camKey] = true
+                                        }}
                                         onDragEnd={(_, info) => {
                                             const newX = camPos.x + info.offset.x;
                                             const newY = camPos.y + info.offset.y;
+                                            isDraggingRef.current[camKey] = false
                                             setBubblePositions(prev => ({ ...prev, [camKey]: { x: newX, y: newY } }));
                                             if (channelRef.current) {
                                                 channelRef.current.send({
@@ -1336,11 +1378,15 @@ export default function RoomClient({ slug }: { slug: string }) {
                                             onPointerDown={e => e.stopPropagation()}
                                             whileDrag={{ scale: 1.05, zIndex: 100, cursor: 'grabbing' }}
                                             initial={{ left: screenPos.x, top: screenPos.y }}
-                                            animate={{ left: screenPos.x, top: screenPos.y }}
+                                            animate={isDraggingRef.current[screenKey] ? undefined : { left: screenPos.x, top: screenPos.y }}
                                             transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
+                                            onDragStart={() => {
+                                                isDraggingRef.current[screenKey] = true
+                                            }}
                                             onDragEnd={(_, info) => {
                                                 const newX = screenPos.x + info.offset.x;
                                                 const newY = screenPos.y + info.offset.y;
+                                                isDraggingRef.current[screenKey] = false
                                                 setBubblePositions(prev => ({ ...prev, [screenKey]: { x: newX, y: newY } }));
                                                 if (channelRef.current) {
                                                     channelRef.current.send({
