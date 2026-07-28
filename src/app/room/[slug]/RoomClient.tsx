@@ -655,18 +655,22 @@ export default function RoomClient({ slug }: { slug: string }) {
         let PeerClass: any = null
 
         const cleanupRoom = () => {
+            console.log("🧹 [WebRTC] Ejecutando limpieza profunda del Room...");
             Object.values(peersRef.current).forEach((peer: any) => {
                 try { peer.destroy() } catch (e) {}
             })
             peersRef.current = {}
             if (stream) {
+                console.log("🛑 [WebRTC] Deteniendo pistas de medios locales...");
                 stream.getTracks().forEach(track => track.stop())
             }
             if (channelRef.current) {
+                console.log("🔌 [WebRTC] Desuscribiendo del canal de Supabase...");
                 channelRef.current.unsubscribe()
                 supabase.removeChannel(channelRef.current)
             }
-            supabase.removeAllChannels()
+            setRemoteStreams({})
+            setLocalStream(null)
         }
 
         const handleBeforeUnload = () => {
@@ -678,7 +682,9 @@ export default function RoomClient({ slug }: { slug: string }) {
             try {
                 // @ts-ignore
                 PeerClass = (await import('@thaunknown/simple-peer')).default
+                console.log("⏳ [WebRTC] Solicitando permisos de cámara y micrófono...");
                 stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+                console.log("🎥 [WebRTC] ¡Cámara y micrófono obtenidos exitosamente!");
                 setLocalStream(stream)
                 if (localVideoRef.current) {
                     localVideoRef.current.srcObject = stream
@@ -686,7 +692,7 @@ export default function RoomClient({ slug }: { slug: string }) {
                 const devs = await navigator.mediaDevices.enumerateDevices()
                 setDevices(devs)
             } catch (err) {
-                console.warn("No se pudo obtener cámara/micrófono", err)
+                console.warn("⚠️ [WebRTC] No se pudo obtener cámara/micrófono:", err)
                 alert("No se pudo acceder a tu cámara o micrófono. Asegúrate de dar los permisos correspondientes. Seguirás conectado a la sala.")
             }
 
@@ -766,6 +772,8 @@ export default function RoomClient({ slug }: { slug: string }) {
                 const { from, to, signal } = payload.payload
                 if (to !== currentUser.id || !signal) return
                 
+                console.log(`📡 [WebRTC] Señal recibida de ${from} | Tipo: ${signal.type || 'ice-candidate'}`)
+                
                 if (!peersRef.current[from]) {
                     const isInitiator = currentUser.id > from
                     createPeer(from, isInitiator, stream, roomChannel, signal)
@@ -773,7 +781,7 @@ export default function RoomClient({ slug }: { slug: string }) {
                     try {
                         peersRef.current[from].signal(signal)
                     } catch (e) {
-                        console.error("Error parsing incoming signal:", e)
+                        console.error(`❌ [WebRTC] Error procesando señal de ${from}:`, e)
                     }
                 }
             })
@@ -830,7 +838,12 @@ export default function RoomClient({ slug }: { slug: string }) {
         }
 
         const createPeer = (targetUserId: string, initiator: boolean, localStream: MediaStream | null, channel: any, incomingSignal?: any) => {
-            if (peersRef.current[targetUserId]) return
+            if (peersRef.current[targetUserId]) {
+                console.warn(`⚠️ [WebRTC] Intento de duplicar Peer con ${targetUserId}. Ignorado.`);
+                return;
+            }
+
+            console.log(`🛠️ [WebRTC] Inicializando nuevo Peer hacia ${targetUserId} | Initiator: ${initiator}`);
 
             const peer = new PeerClass({
                 initiator,
@@ -839,12 +852,13 @@ export default function RoomClient({ slug }: { slug: string }) {
                 config: {
                     iceServers: [
                         { urls: 'stun:stun.l.google.com:19302' },
-                        // TODO: Inyectar credenciales de producción para TURN
+                        { urls: 'stun:global.stun.twilio.com:3478' }
                     ]
                 }
             })
 
             peer.on('signal', (signal: any) => {
+                console.log(`🚀 [WebRTC] Emitiendo señal hacia ${targetUserId} | Tipo: ${signal.type || 'ice-candidate'}`);
                 channel.send({
                     type: 'broadcast',
                     event: 'signal',
@@ -853,16 +867,17 @@ export default function RoomClient({ slug }: { slug: string }) {
             })
 
             peer.on('connect', () => {
-                console.log(`WebRTC conectado exitosamente con ${targetUserId}`)
+                console.log(`✅ [WebRTC] ¡Conexión P2P ESTABLECIDA exitosamente con ${targetUserId}!`)
             })
 
             peer.on('error', (err: any) => {
-                console.error(`Error en Peer con ${targetUserId}:`, err)
+                console.error(`❌ [WebRTC] ERROR CRÍTICO en Peer con ${targetUserId}:`, err)
                 try { peer.destroy() } catch (e) {}
                 delete peersRef.current[targetUserId]
             })
 
             peer.on('stream', (remoteStream: MediaStream) => {
+                console.log(`🔥 [WebRTC] ¡STREAM RECIBIDO de ${targetUserId}! ID: ${remoteStream.id} | Tracks:`, remoteStream.getTracks().length);
                 setRemoteStreams(prev => {
                     const existing = prev[targetUserId] || []
                     if (!existing.some(s => s.id === remoteStream.id)) {
@@ -873,6 +888,7 @@ export default function RoomClient({ slug }: { slug: string }) {
             })
 
             peer.on('removestream', (remoteStream: MediaStream) => {
+                console.log(`🗑️ [WebRTC] Stream removido por ${targetUserId}`);
                 setRemoteStreams(prev => {
                     const existing = prev[targetUserId] || []
                     return { ...prev, [targetUserId]: existing.filter(s => s.id !== remoteStream.id) }
