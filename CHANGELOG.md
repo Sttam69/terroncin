@@ -16,11 +16,13 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.
 - **Monetización**: Un modal rápido de donaciones en el Lobby para apoyar el proyecto vía PayPal o escanear el QR de Deuna.
 - **Donaciones Globales**: Ahora el botón de apoyo es visible desde las pantallas de inicio de sesión y registro, es completamente bilingüe (Español/Inglés) y vive en la esquina superior derecha.
 - **Preparación para Alta Concurrencia**: Las salas interactivas ahora detectan picos de usuarios (más de 15 personas) y activan alertas preventivas de rendimiento para el anfitrión y los invitados.
+- **Protección de Rutas (Middleware)**: Implementamos un sólido candado en el servidor (Edge) usando `@supabase/ssr` que bloquea el acceso de usuarios no autenticados, redirigiéndolos instantáneamente a `/login` sin cargar la aplicación.
 
 ### Cambiado
 - **Rediseño del Lobby**: Le dimos un lavado de cara completo a la pantalla principal (`/`). Adoptamos el estilo glassmorphism, modo oscuro ambiental y una sección súper práctica para acceder a "Mis Salas" de inmediato.
 - **Lienzo Interactivo (Canvas)**: Pasamos de un simple fondo a un mega-lienzo paneable y con zoom (`react-zoom-pan-pinch`). Ahora puedes soltar notas de texto, subir imágenes, usar la herramienta de dibujo y acomodar los videos a tu gusto.
 - **Registro de Cambios Dinámico**: El modal de changelog ahora se alimenta automáticamente de un archivo centralizado (`changelogData.ts`), haciendo que las actualizaciones sean inmediatas.
+- **Privacidad del Lobby**: Eliminamos la posibilidad de explorar la aplicación como "Invitado". El Lobby ahora te espera con una pantalla de carga para garantizar tu sesión y mostrar tu información real de inmediato.
 
 ### Arreglado
 - **Fallo Crítico en Producción (SSR)**: Vercel y Turbopack crasheaban al intentar procesar `simple-peer` en el backend. Lo solucionamos aislando la lógica de la sala en un componente cliente y desactivando el SSR (`next/dynamic`).
@@ -29,3 +31,4 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.
 - **Advertencias de React Next.js**: Corregimos un error estricto de Next.js donde se intentaba acceder de forma síncrona a los parámetros de la URL (`params.slug`). Ahora usamos `use()` de React para desenvolver la Promesa de la ruta adecuadamente.
 - **Seguridad (XSS)**: Implementamos `dompurify` para limpiar cualquier inyección maliciosa de código en los widgets de texto libre (`contentEditable`), garantizando que nadie pueda insertar scripts en el lienzo público.
 - **Construcción en Vercel (Panel Admin)**: Solucionamos un fallo durante el `npm run build` donde Next.js intentaba pre-renderizar estáticamente la ruta `/admin` sin sesión. Ahora forzamos el renderizado dinámico (`force-dynamic`).
+- **Conflictos de Intercepción (Vercel)**: Corregimos un error de despliegue donde el compilador se confundía por la existencia simultánea de `proxy.ts` y `middleware.ts`. Limpiamos los archivos residuales para dejar a `middleware.ts` como la única fuente de la verdad para el Auth Guard.

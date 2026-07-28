@@ -17,7 +17,8 @@ export const changelogData: ChangelogEntry[] = [
             "Changelog automatizado y dinámico",
             "Soporte nativo para OAuth con GitHub",
             "Protecciones XSS, Fugas de Memoria WebRTC y alertas de concurrencia masiva",
-            "Corrección de compilación SSR en Panel de Administración"
+            "Corrección de compilación SSR en Panel de Administración",
+            "Protección de Rutas con Middleware y limpieza de sesión de invitados"
         ] 
     },
     { 
