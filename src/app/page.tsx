@@ -697,7 +697,7 @@ export default function LobbyPage() {
                       {pendingRequests.map(req => (
                         <div key={req.id} className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/10 mb-2">
                           <div className="flex items-center gap-3">
-                            <img src={req.user.avatar_url || 'https://via.placeholder.com/40'} className="w-8 h-8 rounded-full object-cover" />
+                            <img src={req.user.avatar_url || 'https://api.dicebear.com/7.x/initials/svg?seed=' + req.user.display_name} className="w-8 h-8 rounded-full object-cover" />
                             <span className="font-inter text-sm text-white">{req.user.display_name}</span>
                           </div>
                           <button onClick={() => acceptRequest(req.id)} className="px-3 py-1 bg-terroncin-accent text-black font-bold text-xs rounded-lg hover:scale-105 transition-transform">Aceptar</button>
@@ -710,7 +710,7 @@ export default function LobbyPage() {
                   {friendsList.map(f => (
                     <div key={f.id} className="flex items-center justify-between p-3 bg-black/20 rounded-xl border border-white/5 group/friend">
                       <div className="flex items-center gap-3">
-                        <img src={f.avatar_url || 'https://via.placeholder.com/40'} className="w-10 h-10 rounded-full object-cover shrink-0" />
+                        <img src={f.avatar_url || 'https://api.dicebear.com/7.x/initials/svg?seed=' + f.display_name} className="w-10 h-10 rounded-full object-cover shrink-0" />
                         <div className="flex flex-col">
                             <span className="font-inter font-semibold text-white flex items-center gap-2">
                                 {f.display_name}
@@ -752,7 +752,7 @@ export default function LobbyPage() {
                     {searchResults.map(u => (
                       <div key={u.id} className="flex items-center justify-between p-3 bg-black/20 rounded-xl border border-white/5">
                         <div className="flex items-center gap-3">
-                          <img src={u.avatar_url || 'https://via.placeholder.com/40'} className="w-8 h-8 rounded-full object-cover" />
+                          <img src={u.avatar_url || 'https://api.dicebear.com/7.x/initials/svg?seed=' + u.display_name} className="w-8 h-8 rounded-full object-cover" />
                           <span className="font-inter text-sm text-white">{u.display_name}</span>
                         </div>
                         <button onClick={() => sendFriendRequest(u.id)} className="w-8 h-8 bg-white/10 hover:bg-terroncin-primary rounded-full flex items-center justify-center transition-colors">

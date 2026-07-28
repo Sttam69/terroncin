@@ -250,12 +250,12 @@ export default function AdminDashboard() {
                                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                     <div className="flex items-center gap-4">
                                         <div className="flex items-center gap-2">
-                                            <img src={report.reporter?.avatar_url || 'https://via.placeholder.com/40'} className="w-8 h-8 rounded-full border border-white/10" />
+                                            <img src={report.reporter?.avatar_url || 'https://api.dicebear.com/7.x/initials/svg?seed=' + report.reporter?.display_name} className="w-8 h-8 rounded-full border border-white/10" />
                                             <span className="font-semibold text-white text-sm">{report.reporter?.display_name || 'Desconocido'}</span>
                                         </div>
                                         <span className="text-gray-500 material-symbols-outlined">arrow_right_alt</span>
                                         <div className="flex items-center gap-2">
-                                            <img src={report.reported?.avatar_url || 'https://via.placeholder.com/40'} className="w-8 h-8 rounded-full border border-red-500/50" />
+                                            <img src={report.reported?.avatar_url || 'https://api.dicebear.com/7.x/initials/svg?seed=' + report.reported?.display_name} className="w-8 h-8 rounded-full border border-red-500/50" />
                                             <span className="font-semibold text-red-400 text-sm">{report.reported?.display_name || 'Desconocido'}</span>
                                         </div>
                                     </div>

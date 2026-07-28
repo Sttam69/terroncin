@@ -553,10 +553,14 @@ export default function RoomClient({ slug }: { slug: string }) {
             }
 
             // Validar Baneos
-            const { data: banInfo } = await supabase.from('room_bans').select('*').eq('room_id', room.id).eq('user_id', user.id).single()
-            if (banInfo) {
-                setError("Acceso denegado. Has sido bloqueado permanentemente de esta sala.")
-                return
+            try {
+                const { data: banInfo, error: banError } = await supabase.from('room_bans').select('*').eq('room_id', room.id).eq('user_id', user.id).maybeSingle()
+                if (banInfo) {
+                    setError("Acceso denegado. Has sido bloqueado permanentemente de esta sala.")
+                    return
+                }
+            } catch (err) {
+                console.warn("⚠️ [Room] Advertencia validando bans, permitiendo acceso:", err)
             }
 
             setRoomData(room)
@@ -1638,7 +1642,7 @@ export default function RoomClient({ slug }: { slug: string }) {
                             {friendsList.map(f => (
                                 <div key={f.id} className="flex items-center justify-between p-3 bg-black/20 rounded-xl border border-white/5">
                                     <div className="flex items-center gap-3">
-                                        <img src={f.avatar_url || 'https://via.placeholder.com/40'} className="w-8 h-8 rounded-full object-cover" />
+                                        <img src={f.avatar_url || 'https://api.dicebear.com/7.x/initials/svg?seed=' + f.display_name} className="w-8 h-8 rounded-full object-cover" />
                                         <span className="font-inter text-sm font-semibold text-white">{f.display_name}</span>
                                     </div>
                                     <button onClick={() => sendInvite(f.id)} className="px-3 py-1 bg-white/10 hover:bg-white/20 text-white font-bold text-xs rounded-lg transition-colors border border-white/10">Invitar</button>
