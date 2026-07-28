@@ -44,6 +44,23 @@ type Widget = {
     lineWidth?: number;
 }
 
+const RemoteVideoPlayer = ({ stream, className }: { stream: MediaStream, className?: string }) => {
+    const videoRef = useRef<HTMLVideoElement>(null);
+    useEffect(() => {
+        if (videoRef.current && stream) {
+            videoRef.current.srcObject = stream;
+        }
+    }, [stream]);
+    return (
+        <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            className={className || "w-full h-full object-cover pointer-events-none"}
+        />
+    )
+}
+
 const DrawWidget = ({ w, setWidgets }: any) => {
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const [isDrawing, setIsDrawing] = useState(false)
@@ -208,6 +225,9 @@ const SyncedVideoWidget = ({ w, setWidgets, channelRef }: any) => {
     const [url, setUrl] = useState(w.content || '')
     const ignoreNextSync = useRef(false)
 
+    const [isMounted, setIsMounted] = useState(false)
+    useEffect(() => setIsMounted(true), [])
+
     useEffect(() => {
         const handleSync = (e: any) => {
             const data = e.detail
@@ -267,19 +287,20 @@ const SyncedVideoWidget = ({ w, setWidgets, channelRef }: any) => {
                 </div>
             ) : (
                 <div className="w-full h-full pointer-events-auto" onPointerDown={e => e.stopPropagation()}>
-                    {(() => {
+                    {isMounted && (() => {
                         const Player = ReactPlayer as any;
                         return (
                             <Player
                                 ref={playerRef as any}
                                 url={url as any}
-                        width="100%"
-                        height="100%"
-                        controls
-                        playing={playing}
-                        onPlay={onPlay}
-                        onPause={onPause}
+                                width="100%"
+                                height="100%"
+                                controls
+                                playing={playing}
+                                onPlay={onPlay}
+                                onPause={onPause}
                                 onSeek={onSeek}
+                                onError={(e: any) => console.error("Error reproduciendo Video Widget:", e)}
                             />
                         )
                     })()}
@@ -1199,11 +1220,9 @@ export default function RoomClient({ slug }: { slug: string }) {
                                             />
                                         ) : (
                                             mainStream ? (
-                                                <video
-                                                    autoPlay
-                                                    playsInline
+                                                <RemoteVideoPlayer
+                                                    stream={mainStream}
                                                     className="w-full h-full object-cover pointer-events-none"
-                                                    ref={el => { if (el) el.srcObject = mainStream }}
                                                 />
                                             ) : (
                                                 p.avatar_url ? (
@@ -1248,11 +1267,9 @@ export default function RoomClient({ slug }: { slug: string }) {
                                                 setScreenSizes(prev => ({ ...prev, [p.user_id]: { width: target.offsetWidth, height: target.offsetHeight } }))
                                             }}
                                         >
-                                            <video
-                                                autoPlay
-                                                playsInline
+                                            <RemoteVideoPlayer
+                                                stream={screenShareStream}
                                                 className="w-full h-full object-contain pointer-events-none"
-                                                ref={el => { if (el) el.srcObject = screenShareStream }}
                                             />
                                             <div className="absolute top-4 left-4 pointer-events-none bg-[#1e2024]/90 backdrop-blur-md px-4 py-2 rounded-xl border border-terroncin-accent flex items-center gap-2 shadow-lg">
                                                 <span className="material-symbols-outlined text-terroncin-accent text-[20px]">screen_share</span>
@@ -1395,11 +1412,11 @@ export default function RoomClient({ slug }: { slug: string }) {
                             className="bg-transparent border-b border-white/50 text-white outline-none w-32"
                         />
                     ) : (
-                        <span onClick={() => setIsEditingName(true)} className="cursor-text hover:text-white transition-colors">{roomData.name}</span>
+                        <span onClick={() => { if (roomData?.owner_id === currentUser?.id) setIsEditingName(true) }} className={roomData?.owner_id === currentUser?.id ? "cursor-text hover:text-white transition-colors" : ""}>{roomData?.name}</span>
                     )}
                     <span className="opacity-50">|</span>
                     <button onClick={() => setShowParticipantsList(!showParticipantsList)} className="flex items-center gap-1 hover:text-white transition-colors">
-                        <span>{participants.length} conectados</span>
+                        <span>{participants.length || 1} conectados</span>
                         <ChevronDown size={14} className={showParticipantsList ? 'rotate-180 transition-transform' : 'transition-transform'} />
                     </button>
                 </h2>
