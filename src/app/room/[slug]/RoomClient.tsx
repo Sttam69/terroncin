@@ -9,7 +9,8 @@ import { Camera, MonitorUp, MousePointer2, ChevronDown, ChevronUp, Image as Imag
 import Logo from '@/components/Logo'
 import EmojiPicker from 'emoji-picker-react'
 import dynamic from 'next/dynamic'
-const ReactPlayer = dynamic(() => import('react-player'), { ssr: false })
+// @ts-ignore
+const ReactPlayer = dynamic(() => import('react-player/lazy'), { ssr: false })
 import { nanoid } from 'nanoid'
 import DOMPurify from 'dompurify'
 
@@ -214,13 +215,20 @@ const NoteWidget = ({ w, setWidgets, channelRef }: { w: any, setWidgets: any, ch
     )
 }
 
-const TextWidget = ({ w, setWidgets }: any) => {
+const TextWidget = ({ w, setWidgets, channelRef }: any) => {
     const [fontSize, setFontSize] = useState(w.fontSize || 24)
     const [color, setColor] = useState(w.color || '#ffffff')
     const [align, setAlign] = useState(w.textAlign || 'left')
 
     const updateWidget = () => {
         setWidgets((prev: Widget[]) => prev.map(x => x.id === w.id ? { ...x, fontSize, color, textAlign: align } : x))
+        if (channelRef?.current) {
+            channelRef.current.send({
+                type: 'broadcast',
+                event: 'widget_sync',
+                payload: { action: 'update', widget: { id: w.id, fontSize, color, textAlign: align } }
+            })
+        }
     }
 
     return (
@@ -244,6 +252,13 @@ const TextWidget = ({ w, setWidgets }: any) => {
                 onBlur={e => {
                     const newContent = DOMPurify.sanitize(e.currentTarget.innerHTML);
                     setWidgets((prev: Widget[]) => prev.map(x => x.id === w.id ? { ...x, content: newContent } : x))
+                    if (channelRef?.current) {
+                        channelRef.current.send({
+                            type: 'broadcast',
+                            event: 'widget_sync',
+                            payload: { action: 'update', widget: { id: w.id, content: newContent } }
+                        })
+                    }
                 }}
                 dangerouslySetInnerHTML={{ __html: w.content ? DOMPurify.sanitize(w.content) : 'Texto Libre' }}
             />
@@ -255,6 +270,11 @@ const SyncedVideoWidget = ({ w, setWidgets, channelRef }: any) => {
     const playerRef = useRef<any>(null)
     const [url, setUrl] = useState(w.content || '')
     const ignoreNextSync = useRef(false)
+    const [isMounted, setIsMounted] = useState(false)
+
+    useEffect(() => {
+        setIsMounted(true)
+    }, [])
 
     useEffect(() => {
         const handleSync = (e: any) => {
@@ -307,7 +327,7 @@ const SyncedVideoWidget = ({ w, setWidgets, channelRef }: any) => {
                 </div>
             ) : (
                 <div className="w-full h-full pointer-events-auto" onPointerDownCapture={e => e.stopPropagation()}>
-                    {(() => {
+                    {isMounted && url && (() => {
                         const Player = ReactPlayer as any;
                         return (
                             <Player
@@ -331,36 +351,43 @@ const WidgetNode = ({ w, setWidgets, channelRef, canvasScale }: { w: Widget, set
     const dragControls = useDragControls()
     const dragX = useMotionValue(0)
     const dragY = useMotionValue(0)
+    const isDraggingRef = useRef(false)
     return (
         <motion.div
             drag
             dragControls={dragControls}
             dragListener={false}
             dragMomentum={false}
+            whileDrag={{ scale: 1.05, cursor: 'grabbing', zIndex: 100 }}
+            initial={{ left: w.x, top: w.y }}
+            animate={isDraggingRef.current ? undefined : { left: w.x, top: w.y }}
+            transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
+            onDragStart={() => {
+                isDraggingRef.current = true
+            }}
             onDragEnd={(_, info) => {
                 const newX = w.x + (info.offset.x / canvasScale)
                 const newY = w.y + (info.offset.y / canvasScale)
+                isDraggingRef.current = false
                 setWidgets((prev: Widget[]) => prev.map(x => x.id === w.id ? { ...x, x: newX, y: newY } : x))
                 if (channelRef?.current) {
                     channelRef.current.send({
                         type: 'broadcast',
                         event: 'widget_sync',
-                        payload: { action: 'update', widget: { id: w.id, x: newX / CANVAS_SIZE, y: newY / CANVAS_SIZE, _relative: true } }
+                        payload: { action: 'update', widget: { id: w.id, x: newX / 10000, y: newY / 10000, _relative: true } }
                     })
                 }
                 dragX.set(0)
                 dragY.set(0)
             }}
-            whileDrag={{ scale: 1.05, zIndex: 100 }}
-            initial={{ left: w.x, top: w.y }}
-            animate={{ left: w.x, top: w.y, width: w.width || 'auto', height: w.height || 'auto' }}
-            transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
-            className="nodrag absolute flex flex-col z-50 shadow-2xl border border-white/20 rounded-xl bg-[#1e2024]/90 backdrop-blur-md pointer-events-auto resize overflow-hidden"
+            className={`nodrag absolute flex flex-col rounded-[32px] overflow-hidden group pointer-events-auto cursor-grab z-10 resize ${w.type === 'text' ? 'bg-transparent border-none shadow-none' : 'bg-[#1e2024] shadow-2xl border border-white/10'}`}
             style={{
                 x: dragX,
                 y: dragY,
                 minWidth: 200,
                 minHeight: 150,
+                width: w.width || 'auto',
+                height: w.height || 'auto'
             }}
             onMouseUp={(e) => {
                 const target = e.currentTarget;
@@ -377,7 +404,7 @@ const WidgetNode = ({ w, setWidgets, channelRef, canvasScale }: { w: Widget, set
             }}
         >
             <div
-                className="h-8 bg-black/50 flex items-center justify-between px-3 cursor-grab active:cursor-grabbing border-b border-white/10"
+                className={`h-8 flex items-center justify-between px-3 cursor-grab active:cursor-grabbing ${w.type === 'text' ? 'bg-black/30' : 'bg-black/50 border-b border-white/10'}`}
                 onPointerDown={(e) => dragControls.start(e)}
             >
                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pointer-events-none">{w.type}</span>
@@ -385,9 +412,9 @@ const WidgetNode = ({ w, setWidgets, channelRef, canvasScale }: { w: Widget, set
                     <X size={14} />
                 </button>
             </div>
-            <div className="flex-1 bg-[#1e2024]/90 w-full h-full relative" onPointerDown={e => e.stopPropagation()}>
+            <div className={`flex-1 w-full h-full relative ${w.type === 'text' ? 'bg-transparent' : 'bg-[#1e2024]/90'}`} onPointerDown={e => e.stopPropagation()}>
                 {w.type === 'note' && <NoteWidget w={w} setWidgets={setWidgets} channelRef={channelRef} />}
-                {w.type === 'text' && <TextWidget w={w} setWidgets={setWidgets} />}
+                {w.type === 'text' && <TextWidget w={w} setWidgets={setWidgets} channelRef={channelRef} />}
                 {w.type === 'image' && <img src={w.content} className="w-full h-full object-contain pointer-events-none" />}
                 {w.type === 'video' && <SyncedVideoWidget w={w} setWidgets={setWidgets} channelRef={channelRef} />}
                 {w.type === 'draw' && <DrawWidget w={w} setWidgets={setWidgets} channelRef={channelRef} />}
