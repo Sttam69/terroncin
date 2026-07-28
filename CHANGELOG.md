@@ -18,6 +18,7 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.
 ### Arreglado
 - **Despliegues en Vercel Limpios**: Resolución definitiva de los crashes y conflictos de rutas causados por archivos residuales y cachés duplicados, logrando compilaciones exitosas.
 - **Producción Google OAuth**: Se actualizaron las URIs de redirección y credenciales en Supabase para asegurar que el inicio de sesión con Google funcione en el entorno de despliegue en vivo.
+- **Conexión WebRTC (Señalización)**: Solucionamos un fallo crítico (Condición de Carrera) que causaba recuadros negros y fallos de conexión. Implementamos asignación de roles deterministas y eventos atómicos para asegurar conexiones instantáneas y estables.
 
 ## [v0.5.0-alpha] - 2026-07-27
 

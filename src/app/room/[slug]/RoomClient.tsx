@@ -701,7 +701,8 @@ export default function RoomClient({ slug }: { slug: string }) {
                     })
 
                     if (id !== currentUser.id && !peersRef.current[id]) {
-                        createPeer(id, true, stream, roomChannel)
+                        const isInitiator = currentUser.id > id
+                        createPeer(id, isInitiator, stream, roomChannel)
                     }
                 }
 
@@ -742,11 +743,17 @@ export default function RoomClient({ slug }: { slug: string }) {
 
             roomChannel.on('broadcast', { event: 'signal' }, (payload) => {
                 const { from, to, signal } = payload.payload
-                if (to !== currentUser.id) return
+                if (to !== currentUser.id || !signal) return
+                
                 if (!peersRef.current[from]) {
-                    createPeer(from, false, stream, roomChannel, signal)
+                    const isInitiator = currentUser.id > from
+                    createPeer(from, isInitiator, stream, roomChannel, signal)
                 } else {
-                    peersRef.current[from].signal(signal)
+                    try {
+                        peersRef.current[from].signal(signal)
+                    } catch (e) {
+                        console.error("Error parsing incoming signal:", e)
+                    }
                 }
             })
 
@@ -802,6 +809,8 @@ export default function RoomClient({ slug }: { slug: string }) {
         }
 
         const createPeer = (targetUserId: string, initiator: boolean, localStream: MediaStream | null, channel: any, incomingSignal?: any) => {
+            if (peersRef.current[targetUserId]) return
+
             const peer = new PeerClass({
                 initiator,
                 stream: localStream || undefined,
@@ -810,17 +819,28 @@ export default function RoomClient({ slug }: { slug: string }) {
                     iceServers: [
                         { urls: 'stun:stun.l.google.com:19302' },
                         // TODO: Inyectar credenciales de producción para TURN
-                        // { urls: 'turn:global.turn.twilio.com:3478', username: 'tu-usuario', credential: 'tu-password' }
                     ]
                 }
             })
 
             peer.on('signal', (signal: any) => {
-                channel.send({
-                    type: 'broadcast',
-                    event: 'signal',
-                    payload: { from: currentUser.id, to: targetUserId, signal }
-                })
+                if (isChannelReady.current || initiator) {
+                    channel.send({
+                        type: 'broadcast',
+                        event: 'signal',
+                        payload: { from: currentUser.id, to: targetUserId, signal }
+                    })
+                }
+            })
+
+            peer.on('connect', () => {
+                console.log(`WebRTC conectado exitosamente con ${targetUserId}`)
+            })
+
+            peer.on('error', (err: any) => {
+                console.error(`Error en Peer con ${targetUserId}:`, err)
+                try { peer.destroy() } catch (e) {}
+                delete peersRef.current[targetUserId]
             })
 
             peer.on('stream', (remoteStream: MediaStream) => {
@@ -840,8 +860,15 @@ export default function RoomClient({ slug }: { slug: string }) {
                 })
             })
 
-            if (incomingSignal) peer.signal(incomingSignal)
             peersRef.current[targetUserId] = peer
+
+            if (incomingSignal) {
+                try {
+                    peer.signal(incomingSignal)
+                } catch (e) {
+                    console.error("Error aplicando señal inicial:", e)
+                }
+            }
 
             if (localScreenStream) {
                 peer.addStream(localScreenStream)
