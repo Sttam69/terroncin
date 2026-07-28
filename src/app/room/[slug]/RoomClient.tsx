@@ -597,12 +597,77 @@ export default function RoomClient({ slug }: { slug: string }) {
     }
 
     // Chat State
-    type ChatMessage = { id: string; senderId: string; senderName: string; content: string; timestamp: number }
+    type ChatMessage = { id: string; senderId: string; senderName: string; content: string; timestamp: number; type?: 'text' | 'gif'; reactions?: { [emoji: string]: string[] } }
     const [showChat, setShowChat] = useState(false)
     const [messages, setMessages] = useState<ChatMessage[]>([])
     const [chatInput, setChatInput] = useState('')
     const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+    const [showGifPicker, setShowGifPicker] = useState(false)
+    const [gifSearch, setGifSearch] = useState('')
+    const [gifs, setGifs] = useState<any[]>([])
+    const [showMessageReactPicker, setShowMessageReactPicker] = useState<string | null>(null)
     const [hasUnreadMessages, setHasUnreadMessages] = useState(false)
+
+    const searchGifs = async (q: string) => {
+        setGifSearch(q)
+        if (!q.trim()) {
+            setGifs([])
+            return
+        }
+        try {
+            const res = await fetch(`https://tenor.googleapis.com/v2/search?q=${q}&key=${process.env.NEXT_PUBLIC_TENOR_API_KEY || 'LIVDSRZULELA'}&limit=12`)
+            const data = await res.json()
+            setGifs(data.results || [])
+        } catch(e) {
+            console.error("Error fetching gifs", e)
+        }
+    }
+
+    const sendGif = async (gifUrl: string) => {
+        const profile = await supabase.from('profiles').select('display_name').eq('id', currentUser.id).single()
+        const newMsg: ChatMessage = {
+            id: nanoid(),
+            senderId: currentUser.id,
+            senderName: profile.data?.display_name || 'Alguien',
+            content: gifUrl,
+            timestamp: Date.now(),
+            type: 'gif'
+        }
+        channelRef.current?.send({
+            type: 'broadcast',
+            event: 'chat',
+            payload: newMsg
+        })
+        setMessages(prev => [...prev, newMsg])
+        setShowGifPicker(false)
+        setGifSearch('')
+        setGifs([])
+    }
+
+    const toggleReaction = (messageId: string, emoji: string) => {
+        setMessages(prev => prev.map(msg => {
+            if (msg.id === messageId) {
+                const newReactions = { ...(msg.reactions || {}) }
+                const users = newReactions[emoji] || []
+                if (users.includes(currentUser.id)) {
+                    newReactions[emoji] = users.filter(id => id !== currentUser.id)
+                    if (newReactions[emoji].length === 0) delete newReactions[emoji]
+                } else {
+                    newReactions[emoji] = [...users, currentUser.id]
+                }
+                
+                channelRef.current?.send({
+                    type: 'broadcast',
+                    event: 'chat_reaction',
+                    payload: { messageId, reactions: newReactions }
+                })
+                
+                return { ...msg, reactions: newReactions }
+            }
+            return msg
+        }))
+        setShowMessageReactPicker(null)
+    }
 
     const showChatRef = useRef(showChat)
     useEffect(() => { showChatRef.current = showChat }, [showChat])
@@ -977,6 +1042,10 @@ export default function RoomClient({ slug }: { slug: string }) {
                 .on('broadcast', { event: 'chat' }, (payload) => {
                     setMessages(prev => [...prev, payload.payload as ChatMessage])
                     if (!showChatRef.current) setHasUnreadMessages(true)
+                })
+                .on('broadcast', { event: 'chat_reaction' }, (payload) => {
+                    const { messageId, reactions } = payload.payload
+                    setMessages(prev => prev.map(msg => msg.id === messageId ? { ...msg, reactions } : msg))
                 })
                 .on('broadcast', { event: 'video_sync' }, (payload) => {
                     window.dispatchEvent(new CustomEvent('video_sync', { detail: payload.payload }))
@@ -1416,8 +1485,8 @@ export default function RoomClient({ slug }: { slug: string }) {
                             const isMe = p.user_id === currentUser?.id;
 
                             // Posiciones iniciales numéricas (px) para poder acumular offsets
-                            const defaultX = isMe ? 4700 : (4700 + (index * 200));
-                            const defaultY = isMe ? 4832 : (4900 + (index * 150));
+                            const defaultX = 4700 + (index * 250);
+                            const defaultY = 4832 + (index * 150);
 
                             // Fuente de verdad: bubblePositions (sincronizado) o defaults
                             const camKey = `cam-${p.user_id}`;
@@ -1814,13 +1883,44 @@ export default function RoomClient({ slug }: { slug: string }) {
                     <button onClick={() => setShowChat(false)} className="text-gray-400 hover:text-white"><X size={20} /></button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 pb-24">
+                <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 pb-24">
                     {messages.length === 0 && <p className="text-xs text-gray-500 text-center mt-10">Envía el primer mensaje...</p>}
                     {messages.map(msg => (
                         <div key={msg.id} className={`flex flex-col max-w-[85%] ${msg.senderId === currentUser.id ? 'self-end items-end' : 'self-start items-start'}`}>
                             <span className="text-[10px] text-gray-400 font-inter mb-0.5 ml-1">{msg.senderName}</span>
-                            <div className={`px-3 py-2 rounded-xl text-sm font-inter break-words ${msg.senderId === currentUser.id ? 'bg-terroncin-primary text-white rounded-tr-sm' : 'bg-white/10 text-gray-200 rounded-tl-sm'}`}>
-                                {msg.content}
+                            <div className="group flex items-end gap-2 relative">
+                                {msg.senderId === currentUser.id && (
+                                    <button onClick={() => setShowMessageReactPicker(msg.id)} className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-white pb-1">
+                                        <Smile size={14} />
+                                    </button>
+                                )}
+                                <div className={`px-3 py-2 rounded-xl text-sm font-inter break-words relative ${msg.senderId === currentUser.id ? 'bg-terroncin-primary text-white rounded-tr-sm' : 'bg-white/10 text-gray-200 rounded-tl-sm'}`}>
+                                    {msg.type === 'gif' || msg.content.match(/\.(jpeg|jpg|gif|png)$/i) != null ? (
+                                        <img src={msg.content} className="max-w-[200px] rounded-lg" alt="Media" />
+                                    ) : (
+                                        msg.content
+                                    )}
+                                    {msg.reactions && Object.keys(msg.reactions).length > 0 && (
+                                        <div className={`absolute -bottom-3 ${msg.senderId === currentUser.id ? 'right-0' : 'left-0'} flex gap-1 z-10`}>
+                                            {Object.entries(msg.reactions).map(([emoji, users]) => (
+                                                <button key={emoji} onClick={() => toggleReaction(msg.id, emoji)} className="bg-[#1e2024] border border-white/20 rounded-full px-1.5 py-0.5 text-[10px] flex items-center gap-1 hover:scale-110 transition-transform whitespace-nowrap">
+                                                    <span>{emoji}</span>
+                                                    <span className="text-gray-400">{users.length}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                                {msg.senderId !== currentUser.id && (
+                                    <button onClick={() => setShowMessageReactPicker(msg.id)} className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-white pb-1">
+                                        <Smile size={14} />
+                                    </button>
+                                )}
+                                {showMessageReactPicker === msg.id && (
+                                    <div className={`absolute bottom-full mb-2 z-[90] ${msg.senderId === currentUser.id ? 'right-0' : 'left-0'}`}>
+                                        <EmojiPicker onEmojiClick={(e) => toggleReaction(msg.id, e.emoji)} theme={"dark" as any} />
+                                    </div>
+                                )}
                             </div>
                         </div>
                     ))}
@@ -1832,9 +1932,29 @@ export default function RoomClient({ slug }: { slug: string }) {
                             <EmojiPicker onEmojiClick={(e) => setChatInput(prev => prev + e.emoji)} theme={"dark" as any} />
                         </div>
                     )}
+                    {showGifPicker && (
+                        <div className="absolute bottom-full right-4 mb-2 z-[90] bg-[#1e2024] border border-white/10 rounded-xl p-2 w-64 shadow-2xl">
+                            <input 
+                                type="text"
+                                placeholder="Buscar GIF..."
+                                value={gifSearch}
+                                onChange={(e) => searchGifs(e.target.value)}
+                                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white mb-2 focus:outline-none focus:border-terroncin-primary/50"
+                            />
+                            <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                                {gifs.map(g => (
+                                    <img key={g.id} src={g.media_formats?.nanogif?.url} alt="gif" onClick={() => sendGif(g.media_formats?.gif?.url)} className="w-full h-20 object-cover rounded cursor-pointer hover:opacity-80 transition-opacity" />
+                                ))}
+                                {gifs.length === 0 && gifSearch && <p className="col-span-2 text-center text-xs text-gray-400 py-2">No se encontraron GIFs</p>}
+                            </div>
+                        </div>
+                    )}
                     <form onSubmit={sendMessage} className="flex items-center gap-2">
-                        <button type="button" onClick={() => setShowEmojiPicker(!showEmojiPicker)} className="text-gray-400 hover:text-terroncin-primary transition-colors">
+                        <button type="button" onClick={() => {setShowEmojiPicker(!showEmojiPicker); setShowGifPicker(false);}} className="text-gray-400 hover:text-terroncin-primary transition-colors">
                             <Smile size={20} />
+                        </button>
+                        <button type="button" onClick={() => {setShowGifPicker(!showGifPicker); setShowEmojiPicker(false);}} className="text-gray-400 hover:text-terroncin-primary transition-colors font-bold text-xs px-1">
+                            GIF
                         </button>
                         <input
                             value={chatInput}
