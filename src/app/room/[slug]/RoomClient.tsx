@@ -581,30 +581,31 @@ export default function RoomClient({ slug }: { slug: string }) {
         if (!roomData || isApproved || error || !currentUser) return
 
         const knockChannel = supabase.channel(`knock:${slug}`)
-        
-        knockChannel.on('broadcast', { event: 'join-response' }, (payload) => {
-            if (payload.payload.userId === currentUser.id) {
-                if (payload.payload.approved) {
-                    setIsApproved(true)
-                } else {
-                    setKnockKnockStatus('rejected')
+            .on('broadcast', { event: 'join-response' }, (payload) => {
+                if (payload.payload.userId === currentUser.id) {
+                    if (payload.payload.approved) {
+                        setIsApproved(true)
+                    } else {
+                        setKnockKnockStatus('rejected')
+                    }
                 }
-            }
-        })
+            })
+            .subscribe(async (status) => {
+                if (status === 'SUBSCRIBED') {
+                    const profile = await supabase.from('profiles').select('display_name, avatar_url').eq('id', currentUser.id).single()
+                    const displayName = profile?.data?.display_name || currentUser.email?.split('@')[0] || 'Invitado'
+                    knockChannel.send({
+                        type: 'broadcast',
+                        event: 'join-request',
+                        payload: { userId: currentUser.id, name: displayName, avatar: profile?.data?.avatar_url }
+                    })
+                }
+            })
 
-        knockChannel.subscribe(async (status) => {
-            if (status === 'SUBSCRIBED') {
-                const profile = await supabase.from('profiles').select('display_name, avatar_url').eq('id', currentUser.id).single()
-                const displayName = profile?.data?.display_name || currentUser.email?.split('@')[0] || 'Invitado'
-                knockChannel.send({
-                    type: 'broadcast',
-                    event: 'join-request',
-                    payload: { userId: currentUser.id, name: displayName, avatar: profile?.data?.avatar_url }
-                })
-            }
-        })
-
-        return () => { knockChannel.unsubscribe() }
+        return () => { 
+            knockChannel.unsubscribe() 
+            supabase.removeChannel(knockChannel)
+        }
     }, [roomData, isApproved, error, currentUser, slug, supabase])
 
     // Knock-Knock logic (for owner)
@@ -612,13 +613,16 @@ export default function RoomClient({ slug }: { slug: string }) {
         if (!roomData || roomData.owner_id !== currentUser?.id) return
 
         const knockChannel = supabase.channel(`knock:${slug}`)
-        knockChannel.on('broadcast', { event: 'join-request' }, (payload) => {
-            const requestUser = payload.payload
-            setJoinRequests(prev => [...prev, requestUser])
-        })
-        knockChannel.subscribe()
+            .on('broadcast', { event: 'join-request' }, (payload) => {
+                const requestUser = payload.payload
+                setJoinRequests(prev => [...prev, requestUser])
+            })
+            .subscribe()
 
-        return () => { knockChannel.unsubscribe() }
+        return () => { 
+            knockChannel.unsubscribe() 
+            supabase.removeChannel(knockChannel)
+        }
     }, [roomData, currentUser, slug, supabase])
 
     // Edit Room Name Logic
@@ -718,127 +722,112 @@ export default function RoomClient({ slug }: { slug: string }) {
             })
             channelRef.current = roomChannel
 
-            roomChannel.on('presence', { event: 'sync' }, () => {
-                const presenceState = roomChannel.presenceState()
-                const activeUsers: Participant[] = []
+            roomChannel
+                .on('presence', { event: 'sync' }, () => {
+                    const presenceState = roomChannel.presenceState()
+                    const activeUsers: Participant[] = []
 
-                for (const id in presenceState) {
-                    const state = presenceState[id][0] as any
-                    activeUsers.push({
-                        user_id: id,
-                        display_name: state.display_name,
-                        avatar_url: state.avatar_url,
-                        status_text: state.status_text,
+                    for (const id in presenceState) {
+                        const state = presenceState[id][0] as any
+                        activeUsers.push({
+                            user_id: id,
+                            display_name: state.display_name,
+                            avatar_url: state.avatar_url,
+                            status_text: state.status_text,
+                        })
+
+                        if (id !== currentUser.id && !peersRef.current[id]) {
+                            const isInitiator = currentUser.id > id
+                            createPeer(id, isInitiator, stream, roomChannel)
+                        }
+                    }
+
+                    const currentIds = Object.keys(presenceState)
+                    Object.keys(peersRef.current).forEach(peerId => {
+                        if (!currentIds.includes(peerId)) {
+                            peersRef.current[peerId].destroy()
+                            delete peersRef.current[peerId]
+                            setRemoteStreams(prev => {
+                                const newStreams = { ...prev }
+                                delete newStreams[peerId]
+                                return newStreams
+                            })
+                            setCursors(prev => {
+                                const newCursors = { ...prev }
+                                delete newCursors[peerId]
+                                return newCursors
+                            })
+                        }
                     })
 
-                    if (id !== currentUser.id && !peersRef.current[id]) {
-                        const isInitiator = currentUser.id > id
-                        createPeer(id, isInitiator, stream, roomChannel)
-                    }
-                }
-
-                const currentIds = Object.keys(presenceState)
-                Object.keys(peersRef.current).forEach(peerId => {
-                    if (!currentIds.includes(peerId)) {
-                        peersRef.current[peerId].destroy()
-                        delete peersRef.current[peerId]
-                        setRemoteStreams(prev => {
-                            const newStreams = { ...prev }
-                            delete newStreams[peerId]
-                            return newStreams
-                        })
-                        setCursors(prev => {
-                            const newCursors = { ...prev }
-                            delete newCursors[peerId]
-                            return newCursors
-                        })
+                    setParticipants(activeUsers)
+                    if (activeUsers.length >= 15) {
+                        setAlertMessage("Advertencia: Alta concurrencia. El rendimiento de audio/video podría verse afectado.")
+                        setTimeout(() => setAlertMessage(null), 5000)
                     }
                 })
-
-                setParticipants(activeUsers)
-                if (activeUsers.length >= 15) {
-                    setAlertMessage("Advertencia: Alta concurrencia. El rendimiento de audio/video podría verse afectado.")
-                    setTimeout(() => setAlertMessage(null), 5000)
-                }
-            })
-
-            // Escuchar Kicks
-            roomChannel.on('broadcast', { event: 'kick' }, (payload) => {
-                if (payload.payload.userId === currentUser.id) {
-                    router.push('/')
-                    setTimeout(() => alert("Has sido expulsado de la sala."), 100)
-                }
-            })
-
-            roomChannel.on('presence', { event: 'join' }, () => { })
-
-            roomChannel.on('broadcast', { event: 'signal' }, (payload) => {
-                const { from, to, signal } = payload.payload
-                if (to !== currentUser.id || !signal) return
-                
-                console.log(`📡 [WebRTC] Señal recibida de ${from} | Tipo: ${signal.type || 'ice-candidate'}`)
-                
-                if (!peersRef.current[from]) {
-                    const isInitiator = currentUser.id > from
-                    createPeer(from, isInitiator, stream, roomChannel, signal)
-                } else {
-                    try {
-                        peersRef.current[from].signal(signal)
-                    } catch (e) {
-                        console.error(`❌ [WebRTC] Error procesando señal de ${from}:`, e)
+                .on('broadcast', { event: 'kick' }, (payload) => {
+                    if (payload.payload.userId === currentUser.id) {
+                        router.push('/')
+                        setTimeout(() => alert("Has sido expulsado de la sala."), 100)
                     }
-                }
-            })
-
-            roomChannel.on('broadcast', { event: 'chat' }, (payload) => {
-                setMessages(prev => [...prev, payload.payload as ChatMessage])
-                if (!showChatRef.current) setHasUnreadMessages(true)
-            })
-
-            roomChannel.on('broadcast', { event: 'video_sync' }, (payload) => {
-                window.dispatchEvent(new CustomEvent('video_sync', { detail: payload.payload }))
-            })
-
-            roomChannel.on('broadcast', { event: 'widget_sync' }, (payload) => {
-                const { action, widget } = payload.payload
-                if (action === 'update') {
-                    setWidgets(prev => prev.map(x => x.id === widget.id ? { ...x, ...widget } : x))
-                } else if (action === 'add') {
-                    setWidgets(prev => [...prev, widget])
-                }
-            })
-
-            roomChannel.on('broadcast', { event: 'cursor-move' }, (payload) => {
-                const { userId, x, y, name } = payload.payload
-                if (userId === currentUser.id) return
-                setCursors(prev => ({
-                    ...prev,
-                    [userId]: { x, y, name, color: prev[userId]?.color || getCursorColor(userId) }
-                }))
-            })
-
-            roomChannel.subscribe(async (status) => {
-                if (status === 'SUBSCRIBED') {
-                    isChannelReady.current = true
-                    await roomChannel.track({
-                        display_name: displayName,
-                        avatar_url: avatarUrl,
-                        status_text: statusText,
-                    })
-                } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-                    isChannelReady.current = false
-                }
-            })
-
-            const dbChannel = supabase.channel(`db-changes-${slug}`)
-                .on(
-                    'postgres_changes',
-                    { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `slug=eq.${slug}` },
-                    (payload) => {
-                        setRoomData((prev: any) => ({ ...prev, ...payload.new }))
+                })
+                .on('presence', { event: 'join' }, () => { })
+                .on('broadcast', { event: 'signal' }, (payload) => {
+                    const { from, to, signal } = payload.payload
+                    if (to !== currentUser.id || !signal) return
+                    
+                    console.log(`📡 [WebRTC] Señal recibida de ${from} | Tipo: ${signal.type || 'ice-candidate'}`)
+                    
+                    if (!peersRef.current[from]) {
+                        const isInitiator = currentUser.id > from
+                        createPeer(from, isInitiator, stream, roomChannel, signal)
+                    } else {
+                        try {
+                            peersRef.current[from].signal(signal)
+                        } catch (e) {
+                            console.error(`❌ [WebRTC] Error procesando señal de ${from}:`, e)
+                        }
                     }
-                )
-                .subscribe()
+                })
+                .on('broadcast', { event: 'chat' }, (payload) => {
+                    setMessages(prev => [...prev, payload.payload as ChatMessage])
+                    if (!showChatRef.current) setHasUnreadMessages(true)
+                })
+                .on('broadcast', { event: 'video_sync' }, (payload) => {
+                    window.dispatchEvent(new CustomEvent('video_sync', { detail: payload.payload }))
+                })
+                .on('broadcast', { event: 'widget_sync' }, (payload) => {
+                    const { action, widget } = payload.payload
+                    if (action === 'update') {
+                        setWidgets(prev => prev.map(x => x.id === widget.id ? { ...x, ...widget } : x))
+                    } else if (action === 'add') {
+                        setWidgets(prev => [...prev, widget])
+                    }
+                })
+                .on('broadcast', { event: 'cursor-move' }, (payload) => {
+                    const { userId, x, y, name } = payload.payload
+                    if (userId === currentUser.id) return
+                    setCursors(prev => ({
+                        ...prev,
+                        [userId]: { x, y, name, color: prev[userId]?.color || getCursorColor(userId) }
+                    }))
+                })
+                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `slug=eq.${slug}` }, (payload) => {
+                    setRoomData((prev: any) => ({ ...prev, ...payload.new }))
+                })
+                .subscribe(async (status) => {
+                    if (status === 'SUBSCRIBED') {
+                        isChannelReady.current = true
+                        await roomChannel.track({
+                            display_name: displayName,
+                            avatar_url: avatarUrl,
+                            status_text: statusText,
+                        })
+                    } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                        isChannelReady.current = false
+                    }
+                })
         }
 
         const createPeer = (targetUserId: string, initiator: boolean, localStream: MediaStream | null, channel: any, incomingSignal?: any) => {
