@@ -9,18 +9,19 @@ export const changelogData: ChangelogEntry[] = [
         version: "v0.6.1-beta",
         isLatest: true,
         features: [
-            "Estabilidad P2P WebRTC: Solución de emergencia a condiciones de carrera que causaban pantallas en blanco."
+            "Flujo de ICE Candidates: Solución crítica de WebRTC que asegura el envío asíncrono de candidatos sin descartes, logrando conexiones estables.",
+            "Bloqueo de traducción automática: Se integraron metaetiquetas para evitar que Google Translate rompa el DOM de React.",
+            "Chat optimizado: Se desactivó el autocorrector nativo para prevenir interferencia de los teclados móviles."
         ]
     },
     {
         version: "v0.6.0-beta",
-        isLatest: true,
+        isLatest: false,
         features: [
             "Lanzamiento Beta Público: Transición oficial de Alpha a Beta con arquitectura preparada para alta concurrencia.",
             "Auth Guard estricto con proxy.ts: Migración al nuevo estándar de Next.js 16 para intercepción de rutas y protección de sesiones.",
             "Corrección y limpieza de despliegue: Resolución de conflictos de compilación en Vercel por archivos residuales de middleware.",
-            "Configuración de producción OAuth: URIs de redirección para Google Login apuntando al entorno en vivo.",
-            "Estabilidad P2P WebRTC: Solución de emergencia a condiciones de carrera que causaban pantallas en blanco."
+            "Configuración de producción OAuth: URIs de redirección para Google Login apuntando al entorno en vivo."
         ]
     },
     {

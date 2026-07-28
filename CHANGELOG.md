@@ -5,6 +5,15 @@ Todos los cambios notables de este proyecto se documentarán en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 y este proyecto se adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.6.1-beta] - 2026-07-27
+
+Parche crítico de interfaz y P2P para estabilizar la Beta.
+
+### Arreglado
+- **Flujo de ICE Candidates (WebRTC)**: Eliminamos una restricción condicional que estaba bloqueando la transmisión de candidatos ICE generados por el receptor. Ahora el apretón de manos se completa de forma íntegra evitando recuadros negros persistentes.
+- **Interferencia del Traductor Automático**: Añadimos el atributo `translate="no"` y la metaetiqueta `google` para impedir que navegadores como Chrome traduzcan el DOM de React accidentalmente, lo cual destruía la jerarquía de los elementos.
+- **Interferencia de Teclados**: El input del chat en vivo ya no sufre de autocorrecciones disruptivas (`spellCheck={false}`) para asegurar una experiencia de escritura fluida en móviles.
+
 ## [v0.6.0-beta] - 2026-07-27
 
 ¡Oficializamos el lanzamiento de Terroncín a fase Beta! Toda la arquitectura ha sido consolidada para soportar alta concurrencia y despliegues seguros en producción.
@@ -18,7 +27,6 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.
 ### Arreglado
 - **Despliegues en Vercel Limpios**: Resolución definitiva de los crashes y conflictos de rutas causados por archivos residuales y cachés duplicados, logrando compilaciones exitosas.
 - **Producción Google OAuth**: Se actualizaron las URIs de redirección y credenciales en Supabase para asegurar que el inicio de sesión con Google funcione en el entorno de despliegue en vivo.
-- **Conexión WebRTC (Señalización)**: Solucionamos un fallo crítico (Condición de Carrera) que causaba recuadros negros y fallos de conexión. Implementamos asignación de roles deterministas y eventos atómicos para asegurar conexiones instantáneas y estables.
 
 ## [v0.5.0-alpha] - 2026-07-27
 

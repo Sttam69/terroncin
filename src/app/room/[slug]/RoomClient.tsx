@@ -824,13 +824,11 @@ export default function RoomClient({ slug }: { slug: string }) {
             })
 
             peer.on('signal', (signal: any) => {
-                if (isChannelReady.current || initiator) {
-                    channel.send({
-                        type: 'broadcast',
-                        event: 'signal',
-                        payload: { from: currentUser.id, to: targetUserId, signal }
-                    })
-                }
+                channel.send({
+                    type: 'broadcast',
+                    event: 'signal',
+                    payload: { from: currentUser.id, to: targetUserId, signal }
+                })
             })
 
             peer.on('connect', () => {
@@ -1651,6 +1649,8 @@ export default function RoomClient({ slug }: { slug: string }) {
                             value={chatInput}
                             onChange={e => setChatInput(e.target.value)}
                             placeholder="Mensaje..."
+                            spellCheck={false}
+                            autoComplete="off"
                             className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-terroncin-primary/50"
                         />
                         <button type="submit" className="w-8 h-8 rounded-full bg-terroncin-primary text-white flex items-center justify-center hover:scale-105 transition-transform" disabled={!chatInput.trim()}>
