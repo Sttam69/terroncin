@@ -388,6 +388,7 @@ export default function RoomClient({ slug }: { slug: string }) {
     const [localStream, setLocalStream] = useState<MediaStream | null>(null)
     const [localScreenStream, setLocalScreenStream] = useState<MediaStream | null>(null)
     const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream[]>>({})
+    const [bubblePositions, setBubblePositions] = useState<Record<string, { x: number, y: number }>>({})
 
     // Widgets & Toolbar
     const [widgets, setWidgets] = useState<Widget[]>([])
@@ -813,6 +814,10 @@ export default function RoomClient({ slug }: { slug: string }) {
                         [userId]: { x, y, name, color: prev[userId]?.color || getCursorColor(userId) }
                     }))
                 })
+                .on('broadcast', { event: 'bubble_move' }, (payload) => {
+                    const { bubbleId, x, y } = payload.payload
+                    setBubblePositions(prev => ({ ...prev, [bubbleId]: { x, y } }))
+                })
                 .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `slug=eq.${slug}` }, (payload) => {
                     setRoomData((prev: any) => ({ ...prev, ...payload.new }))
                 })
@@ -899,9 +904,7 @@ export default function RoomClient({ slug }: { slug: string }) {
                 }
             }
 
-            if (localScreenStream) {
-                peer.addStream(localScreenStream)
-            }
+            // Screen share is added only when the user explicitly clicks the share button
         }
 
         startConnection()
@@ -1207,6 +1210,20 @@ export default function RoomClient({ slug }: { slug: string }) {
                                         onPointerDown={e => e.stopPropagation()}
                                         whileDrag={{ scale: 1.05, zIndex: 100, cursor: 'grabbing' }}
                                         initial={{ left: baseLeft, top: baseTop }}
+                                        animate={bubblePositions[`cam-${p.user_id}`] ? { left: bubblePositions[`cam-${p.user_id}`].x, top: bubblePositions[`cam-${p.user_id}`].y } : undefined}
+                                        onDragEnd={(_, info) => {
+                                            const el = document.querySelector(`[data-bubble-id="cam-${p.user_id}"]`) as HTMLElement
+                                            if (el && channelRef.current) {
+                                                const newX = parseFloat(el.style.left) || 0
+                                                const newY = parseFloat(el.style.top) || 0
+                                                channelRef.current.send({
+                                                    type: 'broadcast',
+                                                    event: 'bubble_move',
+                                                    payload: { bubbleId: `cam-${p.user_id}`, x: newX, y: newY }
+                                                })
+                                            }
+                                        }}
+                                        data-bubble-id={`cam-${p.user_id}`}
                                         className={`nodrag absolute flex flex-col z-50 overflow-hidden shadow-2xl border-2 border-terroncin-accent group pointer-events-auto cursor-grab bg-black/80 backdrop-blur-xl resize`}
                                         style={{
                                             width: cameraSizes[p.user_id]?.width || 256,
