@@ -10,7 +10,7 @@ import Logo from '@/components/Logo'
 import EmojiPicker from 'emoji-picker-react'
 import dynamic from 'next/dynamic'
 // @ts-ignore
-const ReactPlayer = dynamic(() => import('react-player/lazy'), { ssr: false })
+const ReactPlayer = dynamic(() => import('react-player'), { ssr: false })
 import { nanoid } from 'nanoid'
 import DOMPurify from 'dompurify'
 
