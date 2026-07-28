@@ -63,7 +63,7 @@ const RemoteVideoPlayer = ({ stream, className }: { stream: MediaStream, classNa
     )
 }
 
-const DrawWidget = ({ w, setWidgets }: any) => {
+const DrawWidget = ({ w, setWidgets, channelRef }: any) => {
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const [isDrawing, setIsDrawing] = useState(false)
     const [color, setColor] = useState(w.color || '#ff6b35')
@@ -113,6 +113,13 @@ const DrawWidget = ({ w, setWidgets }: any) => {
         if (canvasRef.current) {
             const dataUrl = canvasRef.current.toDataURL()
             setWidgets((prev: Widget[]) => prev.map(x => x.id === w.id ? { ...x, drawData: dataUrl } : x))
+            if (channelRef?.current) {
+                channelRef.current.send({
+                    type: 'broadcast',
+                    event: 'widget_sync',
+                    payload: { action: 'update', widget: { id: w.id, drawData: dataUrl } }
+                })
+            }
         }
     }
 
@@ -383,13 +390,13 @@ const WidgetNode = ({ w, setWidgets, channelRef, canvasScale }: { w: Widget, set
                 {w.type === 'text' && <TextWidget w={w} setWidgets={setWidgets} />}
                 {w.type === 'image' && <img src={w.content} className="w-full h-full object-contain pointer-events-none" />}
                 {w.type === 'video' && <SyncedVideoWidget w={w} setWidgets={setWidgets} channelRef={channelRef} />}
-                {w.type === 'draw' && <DrawWidget w={w} setWidgets={setWidgets} />}
+                {w.type === 'draw' && <DrawWidget w={w} setWidgets={setWidgets} channelRef={channelRef} />}
             </div>
         </motion.div>
     )
 }
 
-const ParticipantBubbles = ({ p, isMe, camKey, camPos, screenKey, screenPos, screenShareStream, mainStream, localVideoRef, cameraSizes, setCameraSizes, screenSizes, setScreenSizes, isDraggingRef, setBubblePositions, channelRef, canvasScale }: any) => {
+const ParticipantBubbles = ({ p, isMe, camKey, camPos, screenKey, screenPos, screenShareStream, localScreenStream, mainStream, localVideoRef, cameraSizes, setCameraSizes, screenSizes, setScreenSizes, isDraggingRef, setBubblePositions, channelRef, canvasScale }: any) => {
     const camDragX = useMotionValue(0)
     const camDragY = useMotionValue(0)
     const screenDragX = useMotionValue(0)
@@ -526,6 +533,65 @@ const ParticipantBubbles = ({ p, isMe, camKey, camPos, screenKey, screenPos, scr
                         <span className="material-symbols-outlined text-terroncin-accent text-[20px]">screen_share</span>
                         <span className="font-inter text-sm font-bold text-white">
                             Pantalla de {p.display_name}
+                        </span>
+                    </div>
+                </motion.div>
+            )}
+
+            {/* Tarjeta Extra: Mi Pantalla Compartida (Local) */}
+            {isMe && localScreenStream && (
+                <motion.div
+                    drag
+                    dragMomentum={false}
+                    onPointerDown={e => e.stopPropagation()}
+                    whileDrag={{ scale: 1.05, zIndex: 100, cursor: 'grabbing' }}
+                    initial={{ left: screenPos.x, top: screenPos.y }}
+                    animate={isDraggingRef.current[screenKey] ? undefined : { left: screenPos.x, top: screenPos.y }}
+                    transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
+                    onDragStart={() => {
+                        isDraggingRef.current[screenKey] = true
+                    }}
+                    onDragEnd={(_, info) => {
+                        const newX = screenPos.x + (info.offset.x / canvasScale);
+                        const newY = screenPos.y + (info.offset.y / canvasScale);
+                        isDraggingRef.current[screenKey] = false
+                        const CANVAS_SIZE = 10000;
+                        setBubblePositions((prev: any) => ({ ...prev, [screenKey]: { x: newX, y: newY } }));
+                        if (channelRef.current) {
+                            channelRef.current.send({
+                                type: 'broadcast',
+                                event: 'bubble_move',
+                                payload: { bubbleId: screenKey, rx: newX / CANVAS_SIZE, ry: newY / CANVAS_SIZE }
+                            })
+                        }
+                        screenDragX.set(0)
+                        screenDragY.set(0)
+                    }}
+                    className="nodrag absolute flex flex-col rounded-[32px] z-50 overflow-hidden shadow-2xl border-2 border-terroncin-primary group pointer-events-auto cursor-grab bg-black/90 resize"
+                    style={{
+                        x: screenDragX,
+                        y: screenDragY,
+                        width: screenSizes['local']?.width || 800,
+                        height: screenSizes['local']?.height || 450,
+                        minWidth: 300,
+                        minHeight: 200,
+                    }}
+                    onMouseUp={(e) => {
+                        const target = e.currentTarget;
+                        setScreenSizes((prev: any) => ({ ...prev, ['local']: { width: target.offsetWidth, height: target.offsetHeight } }))
+                    }}
+                >
+                    <video
+                        autoPlay
+                        playsInline
+                        muted
+                        className="w-full h-full object-contain pointer-events-none"
+                        ref={el => { if (el) el.srcObject = localScreenStream }}
+                    />
+                    <div className="absolute top-4 left-4 pointer-events-none bg-[#1e2024]/90 backdrop-blur-md px-4 py-2 rounded-xl border border-terroncin-primary flex items-center gap-2 shadow-lg">
+                        <span className="material-symbols-outlined text-terroncin-primary text-[20px]">screen_share</span>
+                        <span className="font-inter text-sm font-bold text-white">
+                            Tu Pantalla Compartida
                         </span>
                     </div>
                 </motion.div>
@@ -1321,8 +1387,8 @@ export default function RoomClient({ slug }: { slug: string }) {
         const newWidget: Widget = {
             id: nanoid(6),
             type,
-            x: 5000 + (Math.random() * 400 - 200),
-            y: 5000 + (Math.random() * 400 - 200),
+            x: 5000,
+            y: 5000,
             content
         }
         setWidgets(prev => [...prev, newWidget])
@@ -1498,8 +1564,8 @@ export default function RoomClient({ slug }: { slug: string }) {
 
                             // Posición para screen share
                             const screenKey = `screen-${p.user_id}`;
-                            const screenDefaultX = 4800 + (index * 200);
-                            const screenDefaultY = 5150 + (index * 150);
+                            const screenDefaultX = 5000;
+                            const screenDefaultY = 5000;
                             const screenPos = bubblePositions[screenKey] || { x: screenDefaultX, y: screenDefaultY };
 
                             return (
@@ -1512,6 +1578,7 @@ export default function RoomClient({ slug }: { slug: string }) {
                                     screenKey={screenKey}
                                     screenPos={screenPos}
                                     screenShareStream={screenShareStream}
+                                    localScreenStream={localScreenStream}
                                     mainStream={mainStream}
                                     localVideoRef={localVideoRef}
                                     cameraSizes={cameraSizes}
@@ -1525,42 +1592,6 @@ export default function RoomClient({ slug }: { slug: string }) {
                                 />
                             )
                         })}
-
-                        {/* Tarjeta Extra: Mi Pantalla Compartida (Local) */}
-                        {localScreenStream && (
-                            <motion.div
-                                drag
-                                dragMomentum={false}
-                                onPointerDown={e => e.stopPropagation()}
-                                whileDrag={{ scale: 1.05, zIndex: 100, cursor: 'grabbing' }}
-                                initial={{ left: 'calc(5000px - 400px)', top: 'calc(5000px - 500px)' }}
-                                className="nodrag absolute flex flex-col rounded-[32px] z-50 overflow-hidden shadow-2xl border-2 border-terroncin-primary group pointer-events-auto cursor-grab bg-black/90 resize"
-                                style={{
-                                    width: screenSizes['local']?.width || 800,
-                                    height: screenSizes['local']?.height || 450,
-                                    minWidth: 300,
-                                    minHeight: 200,
-                                }}
-                                onMouseUp={(e) => {
-                                    const target = e.currentTarget;
-                                    setScreenSizes(prev => ({ ...prev, ['local']: { width: target.offsetWidth, height: target.offsetHeight } }))
-                                }}
-                            >
-                                <video
-                                    autoPlay
-                                    playsInline
-                                    muted
-                                    className="w-full h-full object-contain pointer-events-none"
-                                    ref={el => { if (el) el.srcObject = localScreenStream }}
-                                />
-                                <div className="absolute top-4 left-4 pointer-events-none bg-[#1e2024]/90 backdrop-blur-md px-4 py-2 rounded-xl border border-terroncin-primary flex items-center gap-2 shadow-lg">
-                                    <span className="material-symbols-outlined text-terroncin-primary text-[20px]">screen_share</span>
-                                    <span className="font-inter text-sm font-bold text-white">
-                                        Tu Pantalla Compartida
-                                    </span>
-                                </div>
-                            </motion.div>
-                         )}
 
                         {/* Telepresencia Visual (Cursores) */}
                         {Object.values(cursors).map((cursor) => (
@@ -1916,17 +1947,20 @@ export default function RoomClient({ slug }: { slug: string }) {
                                         <Smile size={14} />
                                     </button>
                                 )}
-                                {showMessageReactPicker === msg.id && (
-                                    <div className={`absolute bottom-full mb-2 z-[90] ${msg.senderId === currentUser.id ? 'right-0' : 'left-0'}`}>
-                                        <EmojiPicker onEmojiClick={(e) => toggleReaction(msg.id, e.emoji)} theme={"dark" as any} />
-                                    </div>
-                                )}
                             </div>
                         </div>
                     ))}
                 </div>
 
                 <div className="p-4 border-t border-white/10 bg-black/20 absolute bottom-0 left-0 right-0">
+                    {showMessageReactPicker && (
+                        <div className="absolute bottom-full right-4 mb-2 z-[999] shadow-2xl">
+                            <div className="bg-[#1e2024] px-3 py-2 rounded-t-xl border border-white/10 border-b-0 text-xs text-white font-bold text-center">
+                                Reaccionar al mensaje
+                            </div>
+                            <EmojiPicker onEmojiClick={(e) => toggleReaction(showMessageReactPicker, e.emoji)} theme={"dark" as any} />
+                        </div>
+                    )}
                     {showEmojiPicker && (
                         <div className="absolute bottom-full right-4 mb-2 z-[90]">
                             <EmojiPicker onEmojiClick={(e) => setChatInput(prev => prev + e.emoji)} theme={"dark" as any} />
