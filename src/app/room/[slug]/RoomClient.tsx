@@ -12,7 +12,7 @@ import { Flag } from 'lucide-react'
 import EmojiPicker from 'emoji-picker-react'
 import dynamic from 'next/dynamic'
 // @ts-ignore
-const ReactPlayer = dynamic(() => import('react-player'), { ssr: false })
+const ReactPlayer = dynamic(() => import('react-player'), { ssr: false }) as any
 import { nanoid } from 'nanoid'
 import DOMPurify from 'dompurify'
 
@@ -235,7 +235,7 @@ const TextWidget = ({ w, setWidgets, channelRef }: any) => {
 
     return (
         <div className="flex flex-col w-full h-full bg-transparent min-w-[250px] min-h-[150px]">
-            <div className="flex items-center gap-2 p-2 bg-black/20 border-b border-white/10" onPointerDown={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 p-2 bg-black/20 border-b border-white/10 opacity-0 focus-within:opacity-100 group-hover:opacity-100 transition-opacity" onPointerDown={e => e.stopPropagation()}>
                 <input type="number" value={fontSize} onChange={e => setFontSize(Number(e.target.value))} onBlur={updateWidget} className="w-12 bg-black/50 text-white text-xs px-1 py-1 rounded outline-none border border-white/10" title="Tamaño" />
                 <input type="color" value={color} onChange={e => setColor(e.target.value)} onBlur={updateWidget} className="w-6 h-6 bg-transparent border-0 p-0 rounded cursor-pointer" title="Color" />
                 <select value={align} onChange={e => setAlign(e.target.value as any)} onBlur={updateWidget} className="bg-black/50 text-white text-xs rounded px-1 py-1 flex-1 outline-none border border-white/10">
@@ -328,21 +328,19 @@ const SyncedVideoWidget = ({ w, setWidgets, channelRef }: any) => {
                     />
                 </div>
             ) : (
-                <div className="w-full h-full pointer-events-auto" onPointerDownCapture={e => e.stopPropagation()}>
-                    {isMounted && url && (() => {
-                        const Player = ReactPlayer as any;
-                        return (
-                            <Player
-                                ref={playerRef as any}
-                                url={url as any}
-                                width="100%"
-                                height="100%"
-                                controls
-                                onSeek={onSeek}
-                                onError={(e: any) => console.error("Error reproduciendo Video Widget:", e)}
-                            />
-                        )
-                    })()}
+                <div className="w-full h-full pointer-events-auto" onPointerDown={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+                    {isMounted && url && (
+                        // @ts-ignore
+                        <ReactPlayer
+                            ref={playerRef}
+                            url={url as string}
+                            width="100%"
+                            height="100%"
+                            controls={true}
+                            onSeek={onSeek}
+                            onError={(e: any) => console.error("Error reproduciendo Video Widget:", e)}
+                        />
+                    )}
                 </div>
             )}
         </div>
@@ -406,7 +404,7 @@ const WidgetNode = ({ w, setWidgets, channelRef, canvasScale }: { w: Widget, set
             }}
         >
             <div
-                className={`h-8 flex items-center justify-between px-3 cursor-grab active:cursor-grabbing ${w.type === 'text' ? 'bg-black/30' : 'bg-black/50 border-b border-white/10'}`}
+                className={`h-8 flex items-center justify-between px-3 cursor-grab active:cursor-grabbing ${w.type === 'text' ? 'bg-black/30 opacity-0 focus-within:opacity-100 group-hover:opacity-100 transition-opacity' : 'bg-black/50 border-b border-white/10'}`}
                 onPointerDown={(e) => dragControls.start(e)}
             >
                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pointer-events-none">{w.type}</span>
