@@ -54,7 +54,7 @@ const RemoteVideoPlayer = ({ stream, className }: { stream: MediaStream, classNa
     useEffect(() => {
         if (videoRef.current && stream) {
             videoRef.current.srcObject = stream;
-            videoRef.current.play().catch(err => console.warn("Autoplay bloqueado:", err));
+            videoRef.current.play().catch(e => console.error("Autoplay:", e));
         }
     }, [stream]);
     return (
@@ -339,9 +339,12 @@ const SyncedVideoWidget = ({ w, setWidgets, channelRef }: any) => {
                         className="bg-white/10 text-white rounded p-2 text-sm outline-none border border-white/20 w-full"
                         onKeyDown={e => {
                             if (e.key === 'Enter') {
-                                setUrl(e.currentTarget.value)
-                                broadcast('url', { url: e.currentTarget.value })
-                                setWidgets((prev: Widget[]) => prev.map(x => x.id === w.id ? { ...x, content: e.currentTarget.value } : x))
+                                const val = e.currentTarget.value.trim()
+                                if (val) {
+                                    setUrl(val)
+                                    broadcast('url', { url: val })
+                                    setWidgets((prev: Widget[]) => prev.map(x => x.id === w.id ? { ...x, content: val } : x))
+                                }
                             }
                         }}
                     />
@@ -876,6 +879,12 @@ export default function RoomClient({ slug }: { slug: string }) {
     const isChannelReady = useRef(false)
 
     const supabase = createClient()
+
+    useEffect(() => {
+        if (localVideoRef.current && localStream) {
+            localVideoRef.current.srcObject = localStream;
+        }
+    }, [localStream, bubblePositions])
 
     // 1. Init Room & User
     useEffect(() => {
