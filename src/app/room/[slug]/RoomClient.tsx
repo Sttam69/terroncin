@@ -12,7 +12,7 @@ import { Flag } from 'lucide-react'
 import EmojiPicker from 'emoji-picker-react'
 import dynamic from 'next/dynamic'
 // @ts-ignore
-const ReactPlayer = dynamic(() => import('react-player'), { ssr: false }) as any
+const ReactPlayer = dynamic(() => import('react-player'), { ssr: false })
 import { nanoid } from 'nanoid'
 import DOMPurify from 'dompurify'
 
@@ -54,14 +54,21 @@ const RemoteVideoPlayer = ({ stream, className }: { stream: MediaStream, classNa
     useEffect(() => {
         if (videoRef.current && stream) {
             videoRef.current.srcObject = stream;
-            videoRef.current.play().catch(e => console.error("Autoplay:", e));
+            // Forzar reproducción aggressively
+            videoRef.current.play().catch(e => console.warn("Autoplay bloqueado:", e));
+            // Si el stream agrega pistas tarde, volver a disparar el play
+            stream.onaddtrack = () => {
+                if (videoRef.current) videoRef.current.play().catch(() => {});
+            };
         }
     }, [stream]);
+    
     return (
         <video
             ref={videoRef}
             autoPlay
             playsInline
+            muted={false} // VITAL: Debe ser false para escuchar a la otra persona
             className={className || "w-full h-full object-cover pointer-events-none"}
         />
     )
@@ -350,19 +357,25 @@ const SyncedVideoWidget = ({ w, setWidgets, channelRef }: any) => {
                     />
                 </div>
             ) : (
-                <div className="w-full h-full pointer-events-auto" onPointerDown={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} onPointerDownCapture={(e) => e.stopPropagation()} onMouseDownCapture={(e) => e.stopPropagation()}>
-                    {isMounted && url && (
-                        // @ts-ignore
-                        <ReactPlayer
-                            ref={playerRef}
-                            url={url as string}
-                            width="100%"
-                            height="100%"
-                            controls={true}
-                            onSeek={onSeek}
-                            onError={(e: any) => console.error("Error reproduciendo Video Widget:", e)}
-                        />
-                    )}
+                <div 
+                    className="w-full h-full pointer-events-auto bg-black" 
+                    onPointerDownCapture={e => e.stopPropagation()} 
+                    onMouseDownCapture={e => e.stopPropagation()}
+                >
+                    {isMounted && url && (() => {
+                        const Player = ReactPlayer as any;
+                        return (
+                            <Player
+                                ref={playerRef}
+                                url={url as string}
+                                width="100%"
+                                height="100%"
+                                controls={true}
+                                onSeek={onSeek}
+                                onError={(e: any) => console.error("Error reproduciendo Video Widget:", e)}
+                            />
+                        )
+                    })()}
                 </div>
             )}
         </div>
