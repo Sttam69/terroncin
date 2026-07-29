@@ -54,6 +54,7 @@ const RemoteVideoPlayer = ({ stream, className }: { stream: MediaStream, classNa
     useEffect(() => {
         if (videoRef.current && stream) {
             videoRef.current.srcObject = stream;
+            videoRef.current.play().catch(err => console.warn("Autoplay bloqueado:", err));
         }
     }, [stream]);
     return (
@@ -62,6 +63,24 @@ const RemoteVideoPlayer = ({ stream, className }: { stream: MediaStream, classNa
             autoPlay
             playsInline
             className={className || "w-full h-full object-cover pointer-events-none"}
+        />
+    )
+}
+
+const LocalVideoPlayer = ({ stream, className }: { stream: MediaStream, className?: string }) => {
+    const videoRef = useRef<HTMLVideoElement>(null);
+    useEffect(() => {
+        if (videoRef.current && stream) {
+            videoRef.current.srcObject = stream;
+        }
+    }, [stream]);
+    return (
+        <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className={className || "w-full h-full object-contain pointer-events-none"}
         />
     )
 }
@@ -328,7 +347,7 @@ const SyncedVideoWidget = ({ w, setWidgets, channelRef }: any) => {
                     />
                 </div>
             ) : (
-                <div className="w-full h-full pointer-events-auto" onPointerDown={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+                <div className="w-full h-full pointer-events-auto" onPointerDown={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} onPointerDownCapture={(e) => e.stopPropagation()} onMouseDownCapture={(e) => e.stopPropagation()}>
                     {isMounted && url && (
                         // @ts-ignore
                         <ReactPlayer
@@ -423,11 +442,15 @@ const WidgetNode = ({ w, setWidgets, channelRef, canvasScale }: { w: Widget, set
     )
 }
 
-const ParticipantBubbles = ({ p, isMe, camKey, camPos, screenKey, screenPos, screenShareStream, localScreenStream, mainStream, localVideoRef, cameraSizes, setCameraSizes, screenSizes, setScreenSizes, isDraggingRef, setBubblePositions, channelRef, canvasScale }: any) => {
+const ParticipantBubbles = ({ p, isMe, camKey, camPos, screenKey, screenPos, userStreams, localScreenStream, localVideoRef, cameraSizes, setCameraSizes, screenSizes, setScreenSizes, isDraggingRef, setBubblePositions, channelRef, canvasScale }: any) => {
     const camDragX = useMotionValue(0)
     const camDragY = useMotionValue(0)
     const screenDragX = useMotionValue(0)
     const screenDragY = useMotionValue(0)
+
+    // Derive streams from userStreams array — first is camera, rest are screen shares
+    const mainStream = userStreams?.[0] || null
+    const extraStreams = userStreams?.slice(1) || []
 
     return (
         <div>
@@ -510,23 +533,24 @@ const ParticipantBubbles = ({ p, isMe, camKey, camPos, screenKey, screenPos, scr
                 </div>
             </motion.div>
 
-            {/* Tarjeta Extra: Pantalla Compartida Remota */}
-            {!isMe && screenShareStream && (
+            {/* Tarjetas Extra: Pantallas Compartidas Remotas (renderiza TODOS los streams extra) */}
+            {!isMe && extraStreams.map((remoteStream: MediaStream, idx: number) => (
                 <motion.div
+                    key={`${screenKey}-${idx}`}
                     drag
                     dragMomentum={false}
                     onPointerDown={e => e.stopPropagation()}
                     whileDrag={{ scale: 1.05, zIndex: 100, cursor: 'grabbing' }}
-                    initial={{ left: screenPos.x, top: screenPos.y }}
-                    animate={isDraggingRef.current[screenKey] ? undefined : { left: screenPos.x, top: screenPos.y }}
+                    initial={{ left: screenPos.x + (idx * 50), top: screenPos.y + (idx * 50) }}
+                    animate={isDraggingRef.current[`${screenKey}-${idx}`] ? undefined : { left: screenPos.x + (idx * 50), top: screenPos.y + (idx * 50) }}
                     transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
                     onDragStart={() => {
-                        isDraggingRef.current[screenKey] = true
+                        isDraggingRef.current[`${screenKey}-${idx}`] = true
                     }}
                     onDragEnd={(_, info) => {
-                        const newX = screenPos.x + (info.offset.x / canvasScale);
-                        const newY = screenPos.y + (info.offset.y / canvasScale);
-                        isDraggingRef.current[screenKey] = false
+                        const newX = screenPos.x + (idx * 50) + (info.offset.x / canvasScale);
+                        const newY = screenPos.y + (idx * 50) + (info.offset.y / canvasScale);
+                        isDraggingRef.current[`${screenKey}-${idx}`] = false
                         setBubblePositions((prev: any) => ({ ...prev, [screenKey]: { x: newX, y: newY } }));
                         if (channelRef.current) {
                             channelRef.current.send({
@@ -553,7 +577,7 @@ const ParticipantBubbles = ({ p, isMe, camKey, camPos, screenKey, screenPos, scr
                     }}
                 >
                     <RemoteVideoPlayer
-                        stream={screenShareStream}
+                        stream={remoteStream}
                         className="w-full h-full object-contain pointer-events-none"
                     />
                     <div className="absolute top-4 left-4 pointer-events-none bg-[#1e2024]/90 backdrop-blur-md px-4 py-2 rounded-xl border border-terroncin-accent flex items-center gap-2 shadow-lg">
@@ -563,7 +587,7 @@ const ParticipantBubbles = ({ p, isMe, camKey, camPos, screenKey, screenPos, scr
                         </span>
                     </div>
                 </motion.div>
-            )}
+            ))}
 
             {/* Tarjeta Extra: Mi Pantalla Compartida (Local) */}
             {isMe && localScreenStream && (
@@ -608,12 +632,9 @@ const ParticipantBubbles = ({ p, isMe, camKey, camPos, screenKey, screenPos, scr
                         setScreenSizes((prev: any) => ({ ...prev, ['local']: { width: target.offsetWidth, height: target.offsetHeight } }))
                     }}
                 >
-                    <video
-                        autoPlay
-                        playsInline
-                        muted
+                    <LocalVideoPlayer
+                        stream={localScreenStream}
                         className="w-full h-full object-contain pointer-events-none"
-                        ref={el => { if (el) el.srcObject = localScreenStream }}
                     />
                     <div className="absolute top-4 left-4 pointer-events-none bg-[#1e2024]/90 backdrop-blur-md px-4 py-2 rounded-xl border border-terroncin-primary flex items-center gap-2 shadow-lg">
                         <span className="material-symbols-outlined text-terroncin-primary text-[20px]">screen_share</span>
@@ -1591,8 +1612,6 @@ export default function RoomClient({ slug }: { slug: string }) {
                             const camPos = bubblePositions[camKey] || { x: defaultX, y: defaultY };
 
                             const userStreams = remoteStreams[p.user_id] || []
-                            const mainStream = userStreams[0]
-                            const screenShareStream = userStreams[1]
 
                             // Posición para screen share
                             const screenKey = `screen-${p.user_id}`;
@@ -1609,9 +1628,8 @@ export default function RoomClient({ slug }: { slug: string }) {
                                     camPos={camPos}
                                     screenKey={screenKey}
                                     screenPos={screenPos}
-                                    screenShareStream={screenShareStream}
+                                    userStreams={userStreams}
                                     localScreenStream={localScreenStream}
-                                    mainStream={mainStream}
                                     localVideoRef={localVideoRef}
                                     cameraSizes={cameraSizes}
                                     setCameraSizes={setCameraSizes}
