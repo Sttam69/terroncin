@@ -7,6 +7,8 @@ import { motion, useDragControls, useMotionValue } from 'framer-motion'
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch'
 import { Camera, MonitorUp, MousePointer2, ChevronDown, ChevronUp, Image as ImageIcon, Video, MessageSquare, X, Smile, Mic, MicOff, VideoOff, PhoneOff, Type, PlaySquare, PenTool, StickyNote, ChevronRight, ChevronLeft, Pointer } from 'lucide-react'
 import Logo from '@/components/Logo'
+import ReportUserModal from '@/components/ReportUserModal'
+import { Flag } from 'lucide-react'
 import EmojiPicker from 'emoji-picker-react'
 import dynamic from 'next/dynamic'
 // @ts-ignore
@@ -667,6 +669,7 @@ export default function RoomClient({ slug }: { slug: string }) {
     const [knockKnockStatus, setKnockKnockStatus] = useState<'pending' | 'rejected'>('pending')
     const [joinRequests, setJoinRequests] = useState<any[]>([])
     const [showParticipantsList, setShowParticipantsList] = useState(false)
+    const [reportUser, setReportUser] = useState<{ id: string, name: string } | null>(null)
 
     const handleJoinResponse = (userId: string, approved: boolean) => {
         setJoinRequests(prev => prev.filter(req => req.userId !== userId))
@@ -1217,10 +1220,14 @@ export default function RoomClient({ slug }: { slug: string }) {
             const peer = new PeerClass({
                 initiator,
                 stream: localStream || undefined,
-                trickle: true,
+                trickle: false,
                 config: {
                     iceServers: [
                         { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' },
+                        { urls: 'stun:stun2.l.google.com:19302' },
+                        { urls: 'stun:stun3.l.google.com:19302' },
+                        { urls: 'stun:stun4.l.google.com:19302' },
                         { urls: 'stun:global.stun.twilio.com:3478' }
                     ]
                 }
@@ -1742,11 +1749,21 @@ export default function RoomClient({ slug }: { slug: string }) {
                                 
                                 {roomData.owner_id === currentUser.id && p.user_id !== currentUser.id && (
                                     <div className="flex items-center gap-1 opacity-0 group-hover/user:opacity-100 transition-opacity">
+                                        <button onClick={() => setReportUser({ id: p.user_id, name: p.display_name })} className="w-7 h-7 rounded-lg bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500/20 flex items-center justify-center" title="Reportar Usuario">
+                                            <Flag size={14} />
+                                        </button>
                                         <button onClick={() => handleKickUser(p.user_id, false)} className="w-7 h-7 rounded-lg bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 flex items-center justify-center" title="Expulsar (Kick)">
                                             <span className="material-symbols-outlined text-[14px]">logout</span>
                                         </button>
                                         <button onClick={() => handleKickUser(p.user_id, true)} className="w-7 h-7 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 flex items-center justify-center" title="Bloquear Permanentemente">
                                             <span className="material-symbols-outlined text-[14px]">block</span>
+                                        </button>
+                                    </div>
+                                )}
+                                {roomData.owner_id !== currentUser.id && p.user_id !== currentUser.id && (
+                                    <div className="flex items-center gap-1 opacity-0 group-hover/user:opacity-100 transition-opacity">
+                                        <button onClick={() => setReportUser({ id: p.user_id, name: p.display_name })} className="w-7 h-7 rounded-lg bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500/20 flex items-center justify-center" title="Reportar Usuario">
+                                            <Flag size={14} />
                                         </button>
                                     </div>
                                 )}
@@ -2041,6 +2058,16 @@ export default function RoomClient({ slug }: { slug: string }) {
                     <MessageSquare size={28} />
                     {hasUnreadMessages && <span className="absolute top-0 right-0 w-4 h-4 bg-red-500 rounded-full border-2 border-[#1e2024] animate-pulse"></span>}
                 </button>
+            )}
+
+            {/* Report Modal */}
+            {reportUser && currentUser && (
+                <ReportUserModal 
+                    reportedUserId={reportUser.id}
+                    reportedUserName={reportUser.name}
+                    reporterId={currentUser.id}
+                    onClose={() => setReportUser(null)}
+                />
             )}
         </div>
     )

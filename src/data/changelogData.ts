@@ -6,8 +6,18 @@ export type ChangelogEntry = {
 
 export const changelogData: ChangelogEntry[] = [
     {
-        version: "v0.6.1-beta",
+        version: "v0.6.2-beta",
         isLatest: true,
+        features: [
+            "Mensajería Privada (DMs): Chat integrado en el Lobby con notificaciones y persistencia segura.",
+            "Sistema de Reportes Global: Herramienta de moderación accesible desde listas de amigos y salas.",
+            "Resiliencia WAN (WebRTC): Supresión de Trickle ICE para evitar caídas por límites de velocidad.",
+            "Ampliación de Servidores STUN: Incorporación de nodos adicionales para atravesar firewalls internacionales."
+        ]
+    },
+    {
+        version: "v0.6.1-beta",
+        isLatest: false,
         features: [
             "Flujo de ICE Candidates: Solución crítica de WebRTC que asegura el envío asíncrono de candidatos sin descartes, logrando conexiones estables.",
             "Bloqueo de traducción automática: Se integraron metaetiquetas para evitar que Google Translate rompa el DOM de React.",

@@ -9,6 +9,9 @@ import Image from 'next/image'
 import Changelog from '@/components/Changelog'
 import DonateModal from '@/components/DonateModal'
 import Logo from '@/components/Logo'
+import ReportUserModal from '@/components/ReportUserModal'
+import PrivateChatModal from '@/components/PrivateChatModal'
+import { Flag } from 'lucide-react'
 
 export default function LobbyPage() {
   const [roomName, setRoomName] = useState('')
@@ -88,6 +91,10 @@ export default function LobbyPage() {
   // Friend Tags
   const [editingFriendId, setEditingFriendId] = useState<string | null>(null)
   const [friendTagInput, setFriendTagInput] = useState('')
+
+  // Chat & Reports
+  const [activeChatFriend, setActiveChatFriend] = useState<any>(null)
+  const [reportUser, setReportUser] = useState<{ id: string, name: string } | null>(null)
 
   const fetchFriends = async () => {
     if (!user) return
@@ -708,7 +715,7 @@ export default function LobbyPage() {
                   <h4 className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-2">Amigos ({friendsList.length})</h4>
                   {friendsList.length === 0 && <p className="text-sm text-gray-500 text-center py-4">No tienes amigos añadidos aún.</p>}
                   {friendsList.map(f => (
-                    <div key={f.id} className="flex items-center justify-between p-3 bg-black/20 rounded-xl border border-white/5 group/friend">
+                    <div key={f.id} className="flex items-center justify-between p-3 bg-black/20 rounded-xl border border-white/5 group/friend cursor-pointer hover:bg-white/5 transition-colors" onClick={() => setActiveChatFriend(f)}>
                       <div className="flex items-center gap-3">
                         <img src={f.avatar_url || 'https://api.dicebear.com/7.x/initials/svg?seed=' + f.display_name} className="w-10 h-10 rounded-full object-cover shrink-0" />
                         <div className="flex flex-col">
@@ -721,7 +728,7 @@ export default function LobbyPage() {
                       </div>
                       
                       {editingFriendId === f.id ? (
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
                               <input 
                                   autoFocus
                                   value={friendTagInput}
@@ -734,9 +741,14 @@ export default function LobbyPage() {
                               <button onClick={() => setEditingFriendId(null)} className="text-gray-400 hover:text-white"><span className="material-symbols-outlined text-[16px]">close</span></button>
                           </div>
                       ) : (
-                          <button onClick={() => {setEditingFriendId(f.id); setFriendTagInput(f.custom_tag || '')}} className="opacity-0 group-hover/friend:opacity-100 text-gray-400 hover:text-white transition-opacity p-1 shrink-0">
-                              <span className="material-symbols-outlined text-[16px]">edit</span>
-                          </button>
+                          <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                              <button onClick={(e) => { e.stopPropagation(); setReportUser({ id: f.id, name: f.display_name }) }} className="opacity-0 group-hover/friend:opacity-100 text-red-400 hover:text-red-500 transition-opacity p-1 shrink-0" title="Reportar Usuario">
+                                  <Flag size={16} />
+                              </button>
+                              <button onClick={(e) => { e.stopPropagation(); setEditingFriendId(f.id); setFriendTagInput(f.custom_tag || '')}} className="opacity-0 group-hover/friend:opacity-100 text-gray-400 hover:text-white transition-opacity p-1 shrink-0" title="Editar Etiqueta">
+                                  <span className="material-symbols-outlined text-[16px]">edit</span>
+                              </button>
+                          </div>
                       )}
                     </div>
                   ))}
@@ -771,6 +783,27 @@ export default function LobbyPage() {
       {/* Donate Modal */}
       {showDonateModal && (
         <DonateModal onClose={() => setShowDonateModal(false)} />
+      )}
+
+      {/* Report Modal */}
+      {reportUser && (
+        <ReportUserModal 
+          reportedUserId={reportUser.id}
+          reportedUserName={reportUser.name}
+          reporterId={user?.id}
+          onClose={() => setReportUser(null)}
+        />
+      )}
+
+      {/* Private Chat Modal */}
+      {activeChatFriend && (
+        <PrivateChatModal
+          friendId={activeChatFriend.id}
+          friendName={activeChatFriend.display_name}
+          friendAvatar={activeChatFriend.avatar_url}
+          currentUserId={user?.id}
+          onClose={() => setActiveChatFriend(null)}
+        />
       )}
 
       <Changelog />

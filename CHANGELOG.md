@@ -5,6 +5,20 @@ Todos los cambios notables de este proyecto se documentarán en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/),
 y este proyecto se adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.6.2-beta] - 2026-07-28
+
+Cimientos del Ecosistema Social y Resiliencia en WAN.
+
+### Añadido
+- **Mensajería Privada (DMs)**: Sistema de chat uno-a-uno en el Lobby con notificaciones en tiempo real e historial, protegido por políticas RLS.
+- **Sistema de Reportes Global**: Modal para reportar usuarios (spam, acoso, etc.) desde la lista de amigos y desde los participantes de las salas, integrado directamente a la base de datos para facilitar la moderación.
+
+### Cambiado
+- **Servidores STUN (WebRTC)**: Ampliación de la redundancia de servidores STUN, agregando múltiples servidores de Google y Twilio para mejorar dramáticamente el descubrimiento de IPs públicas a través de firewalls internacionales.
+
+### Arreglado
+- **Redes WAN y Rate-Limiting**: Solucionado un fallo clásico (pantallas negras) que ocurría entre usuarios de diferentes países. Se deshabilitó *Trickle ICE* para forzar el empaquetado de todos los candidatos en un solo SDP, evitando que Supabase Broadcast descarte conexiones por límite de velocidad.
+
 ## [v0.6.1-beta] - 2026-07-27
 
 Parche crítico de interfaz y P2P para estabilizar la Beta.
